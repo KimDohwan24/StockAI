@@ -1,0 +1,99 @@
+name: Spring Boot CI
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'BE/stock-core-api/**'
+      - '.github/workflows/spring-ci.yml'
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - 'BE/stock-core-api/**'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test-and-build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./BE/stock-core-api
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_DB: stock_db
+          POSTGRES_USER: stock_user
+          POSTGRES_PASSWORD: stock_pass
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: wrapper
+
+      - name: Cache Gradle dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      - name: Run tests
+        run: ./gradlew test
+
+      - name: Build JAR
+        run: ./gradlew bootJar
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: stock-core-api-jar
+          path: BE/stock-core-api/build/libs/*.jar
+          retention-days: 7
+
+      # TODO: 추후 Option C (Docker Build + Push)
+      # - name: Build Docker image
+      #   run: docker build -t ghcr.io/${{ github.repository }}/stock-core-api:${{ github.sha }} .
+
+  # TODO: 추후 Option C (Code Quality - SonarQube)
+  # code-quality:
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - name: SonarQube Scan
+  #       uses: SonarSource/sonarqube-scan-action@master
+  #       env:
+  #         SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}

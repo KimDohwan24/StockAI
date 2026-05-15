@@ -1,0 +1,30 @@
+# Dependencies
+node_modules/
+venv/
+.venv/
+env/
+.env
+
+# Next.js
+.next/
+out/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# IDEs
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project specific paths
+FE/stock-frontend/node_modules/
+FE/stock-frontend/.next/
+BE/stock-ai-server/venv/
+BE/stock-ai-server/__pycache__/

@@ -1,0 +1,43 @@
+spring:
+  application:
+    name: stock-core-api
+  datasource:
+    url: ${SPRING_DATASOURCE_URL}
+    username: ${SPRING_DATASOURCE_USERNAME}
+    password: ${SPRING_DATASOURCE_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
+    hibernate:
+      ddl-auto: ${SPRING_JPA_HIBERNATE_DDL_AUTO}
+    show-sql: ${SPRING_JPA_SHOW_SQL}
+    properties:
+      hibernate:
+        format_sql: true
+
+  data:
+    redis:
+      host: ${SPRING_DATA_REDIS_HOST}
+      port: ${SPRING_DATA_REDIS_PORT}
+
+server:
+  port: ${SERVER_PORT}
+
+# Custom Application Properties
+app:
+  ai-server:
+    url: ${APP_AI_SERVER_URL}
+  jwt:
+    secret: ${APP_JWT_SECRET}
+    expiration: ${APP_JWT_EXPIRATION}
+
+# KIS (Korea Investment Securities) Open API
+kis:
+  base-url: ${KIS_BASE_URL}
+  oauth-url: ${KIS_OAUTH_URL}
+  appkey: ${KIS_APPKEY}
+  appsecret: ${KIS_APPSECRET}
+  account:
+    cano: ${KIS_ACCOUNT_CANO}
+    acnt_prdt_cd: ${KIS_ACCOUNT_ACNT_PRDT_CD}

@@ -1,0 +1,60 @@
+@import "tailwindcss";
+
+@theme {
+  /* Meta Brand Colors */
+  --color-meta-blue: #0064e0;
+  --color-meta-blue-deep: #0457cb;
+  --color-ink-button: #000000;
+  --color-canvas: #ffffff;
+  --color-surface-soft: #f1f4f7;
+  --color-ink: #1c1e21;
+  --color-charcoal: #444950;
+  --color-slate: #4b4c4f;
+  --color-steel: #5d6c7b;
+  --color-hairline: #ced0d4;
+  --color-hairline-soft: #dee3e9;
+
+  /* Stock Market Specific */
+  --color-market-up: #e41e3f;
+  --color-market-down: #0064e0;
+  --color-market-neutral: #8595a4;
+
+  /* Meta Border Radius */
+  --radius-meta-xl: 16px;
+  --radius-meta-xxl: 24px;
+  --radius-meta-xxxl: 32px;
+  --radius-meta-full: 100px;
+
+  /* Meta Spacing */
+  --spacing-meta-section: 64px;
+  --spacing-meta-xxl: 32px;
+}
+
+:root {
+  --background: #ffffff;
+  --foreground: #1c1e21;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Custom Utilities */
+.meta-card {
+  @apply bg-white border border-hairline-soft rounded-meta-xl;
+}
+
+.meta-button-primary {
+  @apply bg-ink-button text-white px-8 py-3.5 rounded-meta-full font-bold text-sm transition-all active:bg-charcoal;
+}
+
+.meta-button-buy {
+  @apply bg-meta-blue text-white px-8 py-3.5 rounded-meta-full font-bold text-sm transition-all active:bg-meta-blue-deep;
+}
+
+.meta-button-secondary {
+  @apply bg-transparent text-ink border-2 border-ink px-7 py-3 rounded-meta-full font-bold text-sm transition-all;
+}

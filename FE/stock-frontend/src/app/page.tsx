@@ -249,33 +249,35 @@ export default function Dashboard() {
         time: Math.floor(new Date(m.time).getTime() / 1000),
         value: m.close,
       }));
-      setHero({ ...hero, info, sparkline, loading: false, error: null });
+      setHero(prev => ({ ...prev, info, sparkline, loading: false, error: null }));
     } catch (e) {
-      setHero({ ...hero, loading: false, error: (e as Error).message });
+      setHero(prev => ({ ...prev, loading: false, error: (e as Error).message }));
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const fetchRecommended = useCallback(async () => {
-    const results = await Promise.all(
-      RECOMMENDED_CODES.map(async (code, idx) => {
-        try {
-          const [info, minuteRaw] = await Promise.all([
-            getStockPrice(code),
-            getMinuteCandles(code),
-          ]);
-          const sparkline = minuteRaw.map((m) => ({
-            time: Math.floor(new Date(m.time).getTime() / 1000),
-            value: m.close,
-          }));
-          return { ...recommended[idx], info, sparkline, loading: false, error: null };
-        } catch (e) {
-          return { ...recommended[idx], loading: false, error: (e as Error).message };
-        }
-      })
-    );
-    setRecommended(results);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    try {
+      const results = await Promise.all(
+        RECOMMENDED_CODES.map(async (code) => {
+          try {
+            const [info, minuteRaw] = await Promise.all([
+              getStockPrice(code),
+              getMinuteCandles(code),
+            ]);
+            const sparkline = minuteRaw.map((m) => ({
+              time: Math.floor(new Date(m.time).getTime() / 1000),
+              value: m.close,
+            }));
+            return { code, name: getStockName(code), info, sparkline, loading: false, error: null };
+          } catch (e) {
+            return { code, name: getStockName(code), loading: false, error: (e as Error).message, info: null, sparkline: [] };
+          }
+        })
+      );
+      setRecommended(results);
+    } catch (e) {
+      console.error('Failed to fetch recommended stocks', e);
+    }
   }, []);
 
   useEffect(() => {

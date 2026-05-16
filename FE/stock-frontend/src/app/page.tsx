@@ -1,31 +1,298 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
-import { Search, Bell, User, ShoppingCart, TrendingUp, TrendingDown, ArrowUpRight, Star } from 'lucide-react';
-import StockChart from '@/components/StockChart';
-import { getStockCode, searchStockNames } from '@/lib/stockMap';
+import {
+  Search,
+  Bell,
+  User,
+  ShoppingCart,
+  TrendingUp,
+  TrendingDown,
+  Minus,
+  ArrowUpRight,
+  Star,
+} from 'lucide-react';
+import StockChart, { AreaPoint } from '@/components/StockChart';
+import Sparkline from '@/components/Sparkline';
+import { Time } from 'lightweight-charts';
+import { getStockPrice, getMinuteCandles, MappedStockPrice } from '@/lib/api';
+import { getStockCode, searchStockNames, getStockName } from '@/lib/stockMap';
 
-const MOCK_CHART_DATA = [
-  { time: '2024-01-01', value: 100 },
-  { time: '2024-01-02', value: 105 },
-  { time: '2024-01-03', value: 102 },
-  { time: '2024-01-04', value: 110 },
-  { time: '2024-01-05', value: 108 },
-  { time: '2024-01-06', value: 115 },
-  { time: '2024-01-07', value: 125 },
-];
+// ── 상수 ───────────────────────────────────────────────────
 
-const RECOMMENDED_STOCKS = [
-  { name: '삼성전자', ticker: '005930', price: '78,500', change: '+2.4%', up: true },
-  { name: 'SK하이닉스', ticker: '000660', price: '185,200', change: '+3.1%', up: true },
-  { name: 'NAVER', ticker: '035420', price: '192,400', change: '-0.8%', up: false },
-  { name: '카카오', ticker: '035720', price: '48,200', change: '+1.2%', up: true },
-];
+const HERO_CODE = '005930';
+const RECOMMENDED_CODES = ['005930', '000660', '035420', '035720'];
+const POLLING_INTERVAL = 5000;
+
+// ── 타입 ───────────────────────────────────────────────────
+
+interface StockSnapshot {
+  code: string;
+  name: string;
+  info: MappedStockPrice | null;
+  sparkline: AreaPoint[];
+  loading: boolean;
+  error: string | null;
+}
+
+// ── 숫자 포맷 ─────────────────────────────────────────────
+
+function fmt(n: number): string {
+  if (n === null || n === undefined || isNaN(n)) return '0';
+  return Math.round(n).toLocaleString('ko-KR');
+}
+
+// ── Hero ──────────────────────────────────────────────────
+
+function HeroSection({ data }: { data: StockSnapshot }) {
+  const { info, sparkline, loading, error } = data;
+
+  const colorClass = !info
+    ? 'text-ink'
+    : info.isUp || info.isLimitUp
+    ? 'text-market-up'
+    : info.isDown || info.isLimitDown
+    ? 'text-market-down'
+    : 'text-market-neutral';
+
+  return (
+    <section className="mb-16">
+      <div className="bg-white border border-hairline-soft rounded-[32px] overflow-hidden shadow-[0_20px_40px_rgba(0,100,224,0.08)]">
+        <div className="grid lg:grid-cols-[1fr_400px] items-center">
+          <div className="p-12">
+            <div className="flex items-center gap-2 mb-6">
+              <span className="bg-market-up text-white text-[10px] font-bold px-2 py-1 rounded-meta-full uppercase tracking-wider">
+                Today&apos;s Pick
+              </span>
+              <span className="text-steel text-sm">AI 가 분석한 오늘의 강력 추천주</span>
+            </div>
+            <h2 className="text-5xl font-bold mb-4 leading-tight">
+              {getStockName(HERO_CODE)} ({HERO_CODE})
+            </h2>
+            <p className="text-xl text-slate mb-8 max-w-lg">
+              반도체 사이클 회복과 AI 수요 증가로 인해 2분기 실적 개선이 기대됩니다. 현재
+              구간에서 강력한 매수 신호가 감지되었습니다.
+            </p>
+            <div className="flex gap-4">
+              <Link href={`/stock/${HERO_CODE}`} className="meta-button-buy inline-block text-center">
+                지금 매수하기
+              </Link>
+              <Link href={`/stock/${HERO_CODE}`} className="meta-button-secondary inline-block text-center">
+                상세 분석 보기
+              </Link>
+            </div>
+          </div>
+
+          <div className="bg-surface-soft p-8 h-full flex flex-col justify-center border-l border-hairline-soft">
+            {loading && (
+              <div className="flex items-center justify-center h-full text-steel text-sm">
+                데이터 로딩 중...
+              </div>
+            )}
+            {error && (
+              <div className="flex items-center justify-center h-full text-market-down text-sm">
+                {error}
+              </div>
+            )}
+            {!loading && !error && info && (
+              <>
+                <div className="flex items-end justify-between mb-4">
+                  <div>
+                    <p className="text-sm text-steel mb-1">현재가</p>
+                    <p className={`text-3xl font-bold ${colorClass}`}>
+                      {fmt(info.price)}{' '}
+                      <span className="text-lg">
+                        {info.change >= 0 ? '+' : ''}
+                        {fmt(info.change)}
+                      </span>
+                    </p>
+                    <p className={`text-sm font-bold mt-1 ${colorClass}`}>
+                      {info.changeRate >= 0 ? '+' : ''}
+                      {info.changeRate}%
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-sm text-steel mb-1">매칭 점수</p>
+                    <p className="text-3xl font-bold text-meta-blue">98%</p>
+                  </div>
+                </div>
+                <div className="h-[200px] w-full bg-white rounded-meta-xxl p-4 border border-hairline-soft">
+                  {sparkline.length > 0 ? (
+                    <StockChart data={sparkline} type="area" color={info.isUp ? '#e41e3f' : '#0064e0'} />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center text-steel text-xs">
+                      차트 데이터 없음
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// ── 추천 종목 카드 ─────────────────────────────────────────
+
+function StockCard({ data }: { data: StockSnapshot }) {
+  const { code, name, info, sparkline, loading } = data;
+
+  if (loading || !info) {
+    return (
+      <div className="meta-card p-6 block animate-pulse">
+        <div className="h-4 bg-surface-soft rounded w-1/3 mb-2" />
+        <div className="h-6 bg-surface-soft rounded w-2/3 mb-4" />
+        <div className="h-8 bg-surface-soft rounded w-1/2" />
+      </div>
+    );
+  }
+
+  const colorClass =
+    info.isUp || info.isLimitUp
+      ? 'text-market-up'
+      : info.isDown || info.isLimitDown
+      ? 'text-market-down'
+      : 'text-market-neutral';
+
+  return (
+    <Link
+      href={`/stock/${code}`}
+      className="meta-card p-6 hover:shadow-lg transition-shadow cursor-pointer group block"
+    >
+      <div className="flex justify-between items-start mb-4">
+        <div>
+          <p className="text-xs text-steel mb-1">{code}</p>
+          <h4 className="font-bold text-lg group-hover:text-meta-blue transition-colors">{name}</h4>
+        </div>
+        <button className="text-hairline hover:text-meta-blue transition-colors">
+          <Star className="w-5 h-5" />
+        </button>
+      </div>
+
+      <div className="flex items-end justify-between">
+        <div>
+          <p className="text-xl font-bold">{fmt(info.price)}</p>
+          <div className={`flex items-center gap-1 text-sm font-bold ${colorClass}`}>
+            {info.sign === '3' ? (
+              <Minus className="w-4 h-4" />
+            ) : info.isUp ? (
+              <TrendingUp className="w-4 h-4" />
+            ) : (
+              <TrendingDown className="w-4 h-4" />
+            )}
+            <span>
+              {info.change >= 0 ? '+' : ''}
+              {fmt(info.change)} ({info.changeRate >= 0 ? '+' : ''}
+              {info.changeRate}%)
+            </span>
+          </div>
+        </div>
+        <div className="w-16 h-10 flex-shrink-0 ml-3 overflow-visible">
+          {sparkline.length > 0 ? (
+            <Sparkline
+              data={sparkline}
+              color={info.isUp ? '#e41e3f' : '#0064e0'}
+            />
+          ) : (
+            <div className="w-full h-full bg-surface-soft rounded" />
+          )}
+        </div>
+      </div>
+    </Link>
+  );
+}
+
+// ── 메인 대시보드 ──────────────────────────────────────────
 
 export default function Dashboard() {
   const [searchQuery, setSearchQuery] = useState('');
   const [suggestions, setSuggestions] = useState<{ name: string; code: string }[]>([]);
+
+  // Hero 상태
+  const [hero, setHero] = useState<StockSnapshot>({
+    code: HERO_CODE,
+    name: getStockName(HERO_CODE),
+    info: null,
+    sparkline: [],
+    loading: true,
+    error: null,
+  });
+
+  // 추천 종목 상태
+  const [recommended, setRecommended] = useState<StockSnapshot[]>(
+    RECOMMENDED_CODES.map((code) => ({
+      code,
+      name: getStockName(code),
+      info: null,
+      sparkline: [],
+      loading: true,
+      error: null,
+    }))
+  );
+
+  // ── 데이터 페칭 ─────────────────────────────────────────
+
+  const fetchHero = useCallback(async () => {
+    try {
+      const [info, minuteRaw] = await Promise.all([
+        getStockPrice(HERO_CODE),
+        getMinuteCandles(HERO_CODE),
+      ]);
+      const sparkline = minuteRaw.map((m) => ({
+        time: Math.floor(new Date(m.time).getTime() / 1000) as Time,
+        value: m.close,
+      }));
+      setHero(prev => ({ ...prev, info, sparkline, loading: false, error: null }));
+    } catch (e) {
+      setHero(prev => ({ ...prev, loading: false, error: (e as Error).message }));
+    }
+  }, []);
+
+  const fetchRecommended = useCallback(async () => {
+    try {
+      const results = await Promise.all(
+        RECOMMENDED_CODES.map(async (code) => {
+          try {
+            const [info, minuteRaw] = await Promise.all([
+              getStockPrice(code),
+              getMinuteCandles(code),
+            ]);
+            const sparkline = minuteRaw.map((m) => ({
+              time: Math.floor(new Date(m.time).getTime() / 1000) as Time,
+              value: m.close,
+            }));
+            return { code, name: getStockName(code), info, sparkline, loading: false, error: null };
+          } catch (e) {
+            return { code, name: getStockName(code), loading: false, error: (e as Error).message, info: null, sparkline: [] };
+          }
+        })
+      );
+      setRecommended(results);
+    } catch (e) {
+      console.error('Failed to fetch recommended stocks', e);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchHero();
+    fetchRecommended();
+
+    const timer = setInterval(() => {
+      fetchHero();
+      fetchRecommended();
+    }, POLLING_INTERVAL);
+
+    return () => clearInterval(timer);
+  }, [fetchHero, fetchRecommended]);
+
+  // ── 검색 핸들러 ──────────────────────────────────────────
+
+  const navigateToStock = (code: string) => {
+    window.location.href = `/stock/${code}`;
+  };
 
   const handleSearchChange = (value: string) => {
     setSearchQuery(value);
@@ -36,10 +303,6 @@ export default function Dashboard() {
     }
   };
 
-  const navigateToStock = (code: string) => {
-    window.location.href = `/stock/${code}`;
-  };
-
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const trimmed = searchQuery.trim();
@@ -48,7 +311,6 @@ export default function Dashboard() {
     if (code) {
       navigateToStock(code);
     } else {
-      // 검색어에 해당하는 종목이 없으면 숫자(코드)인지 확인 후 그대로 이동
       const numeric = trimmed.replace(/\D/g, '');
       if (numeric && numeric.length >= 5) {
         navigateToStock(numeric);
@@ -64,7 +326,10 @@ export default function Dashboard() {
           <div className="flex items-center gap-8">
             <h1 className="text-xl font-bold tracking-tight text-meta-blue">StockAI</h1>
             <div className="hidden md:block relative w-80">
-              <form onSubmit={handleSearchSubmit} className="flex items-center gap-2 bg-surface-soft px-4 py-2 rounded-meta-full">
+              <form
+                onSubmit={handleSearchSubmit}
+                className="flex items-center gap-2 bg-surface-soft px-4 py-2 rounded-meta-full"
+              >
                 <Search className="w-4 h-4 text-steel" />
                 <input
                   type="text"
@@ -107,49 +372,10 @@ export default function Dashboard() {
       </nav>
 
       <main className="max-w-7xl mx-auto px-6 py-12">
-        {/* Recommendation Hero */}
-        <section className="mb-16">
-          <div className="bg-white border border-hairline-soft rounded-[32px] overflow-hidden shadow-[0_20px_40px_rgba(0,100,224,0.08)]">
-            <div className="grid lg:grid-cols-[1fr_400px] items-center">
-              <div className="p-12">
-                <div className="flex items-center gap-2 mb-6">
-                  <span className="bg-market-up text-white text-[10px] font-bold px-2 py-1 rounded-meta-full uppercase tracking-wider">Today&apos;s Pick</span>
-                  <span className="text-steel text-sm">AI 가 분석한 오늘의 강력 추천주</span>
-                </div>
-                <h2 className="text-5xl font-bold mb-4 leading-tight">삼성전자 (005930)</h2>
-                <p className="text-xl text-slate mb-8 max-w-lg">
-                  반도체 사이클 회복과 AI 수요 증가로 인해 2분기 실적 개선이 기대됩니다. 현재 구간에서 강력한 매수 신호가 감지되었습니다.
-                </p>
-                <div className="flex gap-4">
-                  <Link href="/stock/005930" className="meta-button-buy inline-block text-center">
-                    지금 매수하기
-                  </Link>
-                  <Link href="/stock/005930" className="meta-button-secondary inline-block text-center">
-                    상세 분석 보기
-                  </Link>
-                </div>
-              </div>
+        {/* Hero */}
+        <HeroSection data={hero} />
 
-              <div className="bg-surface-soft p-8 h-full flex flex-col justify-center border-l border-hairline-soft">
-                <div className="flex items-end justify-between mb-4">
-                  <div>
-                    <p className="text-sm text-steel mb-1">현재가</p>
-                    <p className="text-3xl font-bold text-market-up">78,500 <span className="text-lg">▲ 1,800</span></p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-sm text-steel mb-1">매칭 점수</p>
-                    <p className="text-3xl font-bold text-meta-blue">98%</p>
-                  </div>
-                </div>
-                <div className="h-[200px] w-full bg-white rounded-meta-xxl p-4 border border-hairline-soft">
-                  <StockChart data={MOCK_CHART_DATA} color="#e41e3f" />
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* Stock Grid */}
+        {/* 추천 종목 그리드 */}
         <section>
           <div className="flex items-center justify-between mb-8">
             <h3 className="text-2xl font-bold">인기 추천 종목</h3>
@@ -157,34 +383,8 @@ export default function Dashboard() {
           </div>
 
           <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {RECOMMENDED_STOCKS.map((stock) => (
-              <Link href={`/stock/${stock.ticker}`} key={stock.ticker} className="meta-card p-6 hover:shadow-lg transition-shadow cursor-pointer group block">
-                <div className="flex justify-between items-start mb-4">
-                  <div>
-                    <p className="text-xs text-steel mb-1">{stock.ticker}</p>
-                    <h4 className="font-bold text-lg group-hover:text-meta-blue transition-colors">{stock.name}</h4>
-                  </div>
-                  <button className="text-hairline hover:text-meta-blue transition-colors">
-                    <Star className="w-5 h-5" />
-                  </button>
-                </div>
-
-                <div className="flex items-end justify-between">
-                  <div>
-                    <p className="text-xl font-bold">{stock.price}</p>
-                    <div className={`flex items-center gap-1 text-sm font-bold ${stock.up ? 'text-market-up' : 'text-market-down'}`}>
-                      {stock.up ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
-                      {stock.change}
-                    </div>
-                  </div>
-                  <div className="w-16 h-10">
-                    <StockChart
-                      data={MOCK_CHART_DATA.slice(-4)}
-                      color={stock.up ? '#e41e3f' : '#0064e0'}
-                    />
-                  </div>
-                </div>
-              </Link>
+            {recommended.map((stock) => (
+              <StockCard key={stock.code} data={stock} />
             ))}
           </div>
         </section>

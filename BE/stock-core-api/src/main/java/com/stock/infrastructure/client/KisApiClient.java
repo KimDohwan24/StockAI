@@ -1,5 +1,8 @@
 package com.stock.infrastructure.client;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.stock.config.KisConfig;
 import com.stock.infrastructure.dto.kis.*;
 import com.stock.service.KisAuthService;
@@ -12,6 +15,7 @@ import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.util.UriComponentsBuilder;
 import reactor.core.publisher.Mono;
 
+import java.util.Collections;
 import java.util.List;
 
 @Slf4j
@@ -21,6 +25,7 @@ public class KisApiClient {
 
     private final KisConfig kisConfig;
     private final KisAuthService kisAuthService;
+    private final ObjectMapper objectMapper;
 
     private WebClient getWebClient() {
         return WebClient.builder()
@@ -84,7 +89,7 @@ public class KisApiClient {
                 .queryParam("fid_org_adj_prc", "0") // 0:수정주가, 1:원주가
                 .toUriString();
 
-        KisApiResponse<List<DailyPriceItem>> response = getWebClient()
+        JsonNode root = getWebClient()
                 .get()
                 .uri(uri)
                 .header("authorization", getAuthHeader())
@@ -96,10 +101,10 @@ public class KisApiClient {
                                     logError(trId, body);
                                     return Mono.error(new RuntimeException("KIS API error: " + body));
                                 }))
-                .bodyToMono(new ParameterizedTypeReference<KisApiResponse<List<DailyPriceItem>>>() {})
+                .bodyToMono(JsonNode.class)
                 .block();
 
-        return validateAndReturn(response, trId);
+        return parseOutput2List(root, trId, new TypeReference<List<DailyPriceItem>>() {});
     }
 
     /**
@@ -110,11 +115,12 @@ public class KisApiClient {
         String uri = UriComponentsBuilder.fromUriString("/uapi/domestic-stock/v1/quotations/inquire-time-itemchartprice")
                 .queryParam("fid_cond_mrkt_div_code", "J")
                 .queryParam("fid_input_iscd", stockCode)
-                .queryParam("fid_hour_cls_code", "0") // 0: 30분봉 (KIS API 특성상 30분 단위)
+                .queryParam("fid_input_hour_1", "0") // 조회 시작 시간 (0: 09시부터)
+                .queryParam("fid_etc_cls_code", "") // 기타구분코드 (공란)
                 .queryParam("fid_pw_data_incu_yn", "N")
                 .toUriString();
 
-        KisApiResponse<List<MinutePriceItem>> response = getWebClient()
+        JsonNode root = getWebClient()
                 .get()
                 .uri(uri)
                 .header("authorization", getAuthHeader())
@@ -126,10 +132,10 @@ public class KisApiClient {
                                     logError(trId, body);
                                     return Mono.error(new RuntimeException("KIS API error: " + body));
                                 }))
-                .bodyToMono(new ParameterizedTypeReference<KisApiResponse<List<MinutePriceItem>>>() {})
+                .bodyToMono(JsonNode.class)
                 .block();
 
-        return validateAndReturn(response, trId);
+        return parseOutput2List(root, trId, new TypeReference<List<MinutePriceItem>>() {});
     }
 
     // ================== 주문 API ==================
@@ -325,5 +331,21 @@ public class KisApiClient {
             throw new RuntimeException("KIS API error [tr_id=" + trId + ", rt_cd=" + response.getRt_cd() + ", msg=" + response.getMsg1() + "]");
         }
         return response;
+    }
+
+    private <T> List<T> parseOutput2List(JsonNode root, String trId, TypeReference<List<T>> typeRef) {
+        if (root == null) {
+            throw new RuntimeException("KIS API returned null [tr_id=" + trId + "]");
+        }
+        String rtCd = root.path("rt_cd").asText("1");
+        if (!"0".equals(rtCd)) {
+            String msg1 = root.path("msg1").asText("");
+            throw new RuntimeException("KIS API error [tr_id=" + trId + ", rt_cd=" + rtCd + ", msg=" + msg1 + "]");
+        }
+        JsonNode output2 = root.path("output2");
+        if (output2.isMissingNode() || !output2.isArray()) {
+            return Collections.emptyList();
+        }
+        return objectMapper.convertValue(output2, typeRef);
     }
 }

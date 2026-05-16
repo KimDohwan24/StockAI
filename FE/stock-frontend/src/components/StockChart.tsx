@@ -28,12 +28,12 @@ function addCandlestickSeriesCompat(chart: IChartApi, options?: object) {
 }
 
 export interface AreaPoint {
-  time: string;
+  time: Time;
   value: number;
 }
 
 export interface CandlePoint {
-  time: string;
+  time: Time;
   open: number;
   high: number;
   low: number;
@@ -64,81 +64,102 @@ export default function StockChart({
   useEffect(() => {
     if (!chartContainerRef.current) return;
 
-    const getWidth = () => chartContainerRef.current?.clientWidth ?? 0;
-    const getHeight = () => height ?? chartContainerRef.current?.clientHeight ?? 200;
+    let cancelled = false;
 
-    const chart = createChart(chartContainerRef.current, {
-      layout: {
-        background: { type: ColorType.Solid, color: 'transparent' },
-        textColor: '#8595a4',
-      },
-      grid: {
-        vertLines: { visible: false },
-        horzLines: { color: '#f1f4f7' },
-      },
-      width: getWidth(),
-      height: getHeight(),
-      timeScale: {
-        visible: true,
-        timeVisible: type === 'candlestick',
-        secondsVisible: false,
-      },
-      rightPriceScale: {
-        visible: true,
-        borderVisible: false,
-      },
-      crosshair: {
-        mode: 1,
-      },
-      handleScroll: type === 'candlestick',
-      handleScale: type === 'candlestick',
-    });
+    const initChart = () => {
+      if (!chartContainerRef.current || cancelled) return;
 
-    if (type === 'candlestick' && isCandleData(data)) {
-      const series = addCandlestickSeriesCompat(chart, {
-        upColor: '#e41e3f',
-        downColor: '#0064e0',
-        borderUpColor: '#e41e3f',
-        borderDownColor: '#0064e0',
-        wickUpColor: '#e41e3f',
-        wickDownColor: '#0064e0',
+      const w = chartContainerRef.current.clientWidth;
+      const h = height ?? chartContainerRef.current.clientHeight;
+
+      // 크기가 아직 확정되지 않았으면 다음 프레임에서 다시 시도
+      if (w === 0 || h === 0) {
+        requestAnimationFrame(initChart);
+        return;
+      }
+
+      const chart = createChart(chartContainerRef.current, {
+        layout: {
+          background: { type: ColorType.Solid, color: 'transparent' },
+          textColor: '#8595a4',
+        },
+        grid: {
+          vertLines: { visible: false },
+          horzLines: { color: '#f1f4f7' },
+        },
+        width: w,
+        height: h,
+        timeScale: {
+          visible: true,
+          timeVisible: type === 'candlestick',
+          secondsVisible: false,
+        },
+        rightPriceScale: {
+          visible: true,
+          borderVisible: false,
+        },
+        crosshair: {
+          mode: 1,
+        },
+        handleScroll: type === 'candlestick',
+        handleScale: type === 'candlestick',
       });
-      const mapped = data.map((d) => ({
-        time: d.time as Time,
-        open: d.open,
-        high: d.high,
-        low: d.low,
-        close: d.close,
-      }));
-      series.setData(mapped);
-    } else {
-      const series = addAreaSeriesCompat(chart, {
-        lineColor: color,
-        topColor: color + '33',
-        bottomColor: color + '00',
-        lineWidth: 2,
-      });
-      series.setData(data as AreaPoint[]);
-    }
 
-    chart.timeScale().fitContent();
-    chartRef.current = chart;
-    setIsReady(true);
+      if (type === 'candlestick' && isCandleData(data)) {
+        const series = addCandlestickSeriesCompat(chart, {
+          upColor: '#e41e3f',
+          downColor: '#0064e0',
+          borderUpColor: '#e41e3f',
+          borderDownColor: '#0064e0',
+          wickUpColor: '#e41e3f',
+          wickDownColor: '#0064e0',
+        });
+        const mapped = data.map((d) => ({
+          time: d.time as Time,
+          open: d.open,
+          high: d.high,
+          low: d.low,
+          close: d.close,
+        }));
+        series.setData(mapped);
+      } else {
+        const series = addAreaSeriesCompat(chart, {
+          lineColor: color,
+          topColor: color + '33',
+          bottomColor: color + '00',
+          lineWidth: 2,
+        });
+        series.setData(data as AreaPoint[]);
+      }
 
-    const handleResize = () => {
-      if (chartContainerRef.current) {
-        chart.applyOptions({
+      chart.timeScale().fitContent();
+      chartRef.current = chart;
+      setIsReady(true);
+    };
+
+    initChart();
+
+    // 컨테이너 자체 크기 변화를 감지해 차트 크기 동기화
+    const resizeObserver = new ResizeObserver(() => {
+      if (chartRef.current && chartContainerRef.current) {
+        chartRef.current.applyOptions({
           width: chartContainerRef.current.clientWidth,
           height: height ?? chartContainerRef.current.clientHeight,
         });
       }
-    };
+    });
 
-    window.addEventListener('resize', handleResize);
+    if (chartContainerRef.current) {
+      resizeObserver.observe(chartContainerRef.current);
+    }
 
     return () => {
-      window.removeEventListener('resize', handleResize);
-      chart.remove();
+      cancelled = true;
+      resizeObserver.disconnect();
+      if (chartRef.current) {
+        chartRef.current.remove();
+        chartRef.current = null;
+      }
       setIsReady(false);
     };
   }, [data, color, type, height]);

@@ -13,8 +13,9 @@ import {
   ArrowUpRight,
   Star,
 } from 'lucide-react';
-import StockChart from '@/components/StockChart';
+import StockChart, { AreaPoint } from '@/components/StockChart';
 import Sparkline from '@/components/Sparkline';
+import { Time } from 'lightweight-charts';
 import { getStockPrice, getMinuteCandles, MappedStockPrice } from '@/lib/api';
 import { getStockCode, searchStockNames, getStockName } from '@/lib/stockMap';
 
@@ -26,16 +27,11 @@ const POLLING_INTERVAL = 5000;
 
 // ── 타입 ───────────────────────────────────────────────────
 
-interface SparklineData {
-  time: string | number;
-  value: number;
-}
-
 interface StockSnapshot {
   code: string;
   name: string;
   info: MappedStockPrice | null;
-  sparkline: SparklineData[];
+  sparkline: AreaPoint[];
   loading: boolean;
   error: string | null;
 }
@@ -246,7 +242,7 @@ export default function Dashboard() {
         getMinuteCandles(HERO_CODE),
       ]);
       const sparkline = minuteRaw.map((m) => ({
-        time: Math.floor(new Date(m.time).getTime() / 1000),
+        time: Math.floor(new Date(m.time).getTime() / 1000) as Time,
         value: m.close,
       }));
       setHero(prev => ({ ...prev, info, sparkline, loading: false, error: null }));
@@ -265,7 +261,7 @@ export default function Dashboard() {
               getMinuteCandles(code),
             ]);
             const sparkline = minuteRaw.map((m) => ({
-              time: Math.floor(new Date(m.time).getTime() / 1000),
+              time: Math.floor(new Date(m.time).getTime() / 1000) as Time,
               value: m.close,
             }));
             return { code, name: getStockName(code), info, sparkline, loading: false, error: null };

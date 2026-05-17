@@ -128,7 +128,32 @@ export default function StockCatalogInfinite({
   const nextPage = currentPage + 1;
   const hasNext = nextPage < totalPages;
 
-  const prefetchKey = hasNext && !isLoadingMore
+  const allItems: StockCatalogItem[] = useMemo(
+    () => loadedPages.flatMap((p) => p.content),
+    [loadedPages]
+  );
+
+  const stockCodes = useMemo(() => allItems.map((item) => item.stockCode), [allItems]);
+
+  const newCodes = useMemo(() => {
+    return stockCodes.filter((code) => !accumulatedPrices[code]);
+  }, [stockCodes, accumulatedPrices]);
+
+  const deltaKey = useMemo(() => newCodes.slice().sort().join(','), [newCodes]);
+
+  const { data: deltaPrices, isLoading: batchLoading, error: batchError } = useSWR(
+    newCodes.length > 0 ? ['batch-prices-delta', deltaKey] : null,
+    () => getBatchPrices(newCodes),
+    { revalidateOnFocus: false, dedupingInterval: 10000 }
+  );
+
+  useEffect(() => {
+    if (deltaPrices) {
+      dispatch({ type: 'merge', prices: deltaPrices });
+    }
+  }, [deltaPrices]);
+
+  const prefetchKey = hasNext && !isLoadingMore && !batchLoading
     ? [`stocks-prefetch`, nextPage, marketType, sector, sign, serverSort]
     : null;
 
@@ -181,31 +206,6 @@ export default function StockCatalogInfinite({
     }
   }, [isLoadingMore, hasNext, prefetchedPage, prefetchPrices, nextPage, marketType, sector, serverSort]);
 
-  const allItems: StockCatalogItem[] = useMemo(
-    () => loadedPages.flatMap((p) => p.content),
-    [loadedPages]
-  );
-
-  const stockCodes = useMemo(() => allItems.map((item) => item.stockCode), [allItems]);
-
-  const newCodes = useMemo(() => {
-    return stockCodes.filter((code) => !accumulatedPrices[code]);
-  }, [stockCodes, accumulatedPrices]);
-
-  const deltaKey = useMemo(() => newCodes.slice().sort().join(','), [newCodes]);
-
-  const { data: deltaPrices, isLoading: batchLoading, error: batchError } = useSWR(
-    newCodes.length > 0 ? ['batch-prices-delta', deltaKey] : null,
-    () => getBatchPrices(newCodes),
-    { revalidateOnFocus: false, dedupingInterval: 10000 }
-  );
-
-  useEffect(() => {
-    if (deltaPrices) {
-      dispatch({ type: 'merge', prices: deltaPrices });
-    }
-  }, [deltaPrices]);
-
   const filteredItems = useMemo(() => {
     const filtered = filterBySign(allItems, accumulatedPrices, sign);
     return sortItems(filtered, accumulatedPrices, sort);
@@ -243,7 +243,7 @@ export default function StockCatalogInfinite({
         </div>
       )}
 
-      <LoadMore onLoadMore={loadMore} hasMore={hasNext} isLoading={isLoadingMore || batchLoading} />
+      <LoadMore onLoadMore={loadMore} hasMore={hasNext} isLoading={isLoadingMore || (newCodes.length > 0 && !batchError)} />
     </BatchPriceProvider>
   );
 }

@@ -60,7 +60,38 @@ export default function OverseasStockCatalogInfinite({
   const nextPage = currentPage + 1;
   const hasNext = nextPage < totalPages;
 
-  const prefetchKey = hasNext && !isLoadingMore
+  const allItems: OverseasStockCatalogItem[] = useMemo(
+    () => loadedPages.flatMap((p) => p.content),
+    [loadedPages]
+  );
+
+  const overseasRequests = useMemo(
+    () => allItems.map((item) => ({ ticker: item.ticker, exchangeCode: item.exchangeCode })),
+    [allItems]
+  );
+
+  const newRequests = useMemo(() => {
+    return overseasRequests.filter((r) => !accumulatedPrices[`${r.ticker}-${r.exchangeCode}`]);
+  }, [overseasRequests, accumulatedPrices]);
+
+  const deltaKey = useMemo(
+    () => newRequests.map((r) => `${r.ticker}-${r.exchangeCode}`).sort().join(','),
+    [newRequests]
+  );
+
+  const { data: deltaPrices, isLoading: batchLoading, error: batchError } = useSWR(
+    newRequests.length > 0 ? ['overseas-batch-prices-delta', deltaKey] : null,
+    () => getOverseasBatchPrices(newRequests),
+    { revalidateOnFocus: false, dedupingInterval: 10000 }
+  );
+
+  useEffect(() => {
+    if (deltaPrices) {
+      dispatch({ type: 'merge', prices: deltaPrices });
+    }
+  }, [deltaPrices]);
+
+  const prefetchKey = hasNext && !isLoadingMore && !batchLoading
     ? [`overseas-prefetch`, nextPage, exchangeCode, country, sector, sort]
     : null;
 
@@ -119,37 +150,6 @@ export default function OverseasStockCatalogInfinite({
     }
   }, [isLoadingMore, hasNext, prefetchedPage, prefetchPrices, nextPage, exchangeCode, country, sector, sort]);
 
-  const allItems: OverseasStockCatalogItem[] = useMemo(
-    () => loadedPages.flatMap((p) => p.content),
-    [loadedPages]
-  );
-
-  const overseasRequests = useMemo(
-    () => allItems.map((item) => ({ ticker: item.ticker, exchangeCode: item.exchangeCode })),
-    [allItems]
-  );
-
-  const newRequests = useMemo(() => {
-    return overseasRequests.filter((r) => !accumulatedPrices[`${r.ticker}-${r.exchangeCode}`]);
-  }, [overseasRequests, accumulatedPrices]);
-
-  const deltaKey = useMemo(
-    () => newRequests.map((r) => `${r.ticker}-${r.exchangeCode}`).sort().join(','),
-    [newRequests]
-  );
-
-  const { data: deltaPrices, isLoading: batchLoading, error: batchError } = useSWR(
-    newRequests.length > 0 ? ['overseas-batch-prices-delta', deltaKey] : null,
-    () => getOverseasBatchPrices(newRequests),
-    { revalidateOnFocus: false, dedupingInterval: 10000 }
-  );
-
-  useEffect(() => {
-    if (deltaPrices) {
-      dispatch({ type: 'merge', prices: deltaPrices });
-    }
-  }, [deltaPrices]);
-
   const overseasPrices = accumulatedPrices;
   const domesticPrices: Record<string, MappedStockPrice> = {};
 
@@ -184,7 +184,7 @@ export default function OverseasStockCatalogInfinite({
         </div>
       )}
 
-      <LoadMore onLoadMore={loadMore} hasMore={hasNext} isLoading={isLoadingMore || batchLoading} />
+      <LoadMore onLoadMore={loadMore} hasMore={hasNext} isLoading={isLoadingMore || (newRequests.length > 0 && !batchError)} />
     </BatchPriceProvider>
   );
 }

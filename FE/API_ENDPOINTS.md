@@ -10,11 +10,16 @@
 
 1. [인증](#1-인증)
 2. [KIS 인증 관리](#2-kis-인증-관리)
-3. [주식 시세](#3-주식-시세)
-4. [계좌 조회](#4-계좌-조회)
-5. [주문](#5-주문)
-6. [요청/응답 DTO 정의](#6-요청응답-dto-정의)
-7. [에러 코드](#7-에러-코드)
+3. [국내 종목 카탈로그](#3-국내-종목-카탈로그)
+4. [주식 시세](#4-주식-시세)
+5. [계좌 조회](#5-계좌-조회)
+6. [주문](#6-주문)
+7. [해외 종목 카탈로그](#7-해외-종목-카탈로그)
+8. [해외 시세](#8-해외-시세)
+9. [해외 주문](#9-해외-주문)
+10. [해외 계좌 조회](#10-해외-계좌-조회)
+11. [요청/응답 DTO 정의](#11-요청응답-dto-정의)
+12. [에러 코드](#12-에러-코드)
 
 ---
 
@@ -105,17 +110,82 @@ KIS 실시간 시세 WebSocket 연결용 Key를 발급합니다.
 
 ---
 
-## 3. 주식 시세
+## 3. 국내 종목 카탈로그
 
 **Base Path:** `/api/stocks`
 
 | Method | Path | 설명 | Auth |
 |--------|------|------|------|
-| `GET` | `/api/stocks/{stockCode}/price` | 현재가 조회 | ✅ JWT |
-| `POST` | `/api/stocks/daily` | 일별/주별/월별/년별 시세 조회 | ✅ JWT |
-| `GET` | `/api/stocks/{stockCode}/minute` | 분봉 시세 조회 | ✅ JWT |
+| `GET` | `/api/stocks` | 전체 종목 목록 (페이지네이션) | ❌ Public |
+| `GET` | `/api/stocks/search?query=` | 종목 검색 (이름/코드) | ❌ Public |
+| `POST` | `/api/stocks/sync` | KIS 종목 마스터 동기화 (관리자) | ✅ JWT (ADMIN) |
 
-### 3.1 GET /api/stocks/{stockCode}/price
+### 3.1 GET /api/stocks
+전체 국내 종목 목록을 페이지네이션으로 조회합니다.
+
+**Query Parameters:**
+| 이름 | 타입 | 필수 | 설명 | 예시 |
+|------|------|------|------|------|
+| `marketType` | string | ❌ | 시장구분 (KOSPI, KOSDAQ) | `KOSPI` |
+| `sector` | string | ❌ | 섹터 필터 | `반도체` |
+| `page` | int | ❌ | 페이지 번호 (0부터) | `0` |
+| `size` | int | ❌ | 페이지 크기 (기본 20) | `20` |
+
+**Response:** `Page<StockCatalogResponse>`
+```json
+{
+  "content": [
+    {
+      "stockCode": "005930",
+      "name": "삼성전자",
+      "sector": "반도체",
+      "marketType": "KOSPI"
+    }
+  ],
+  "totalElements": 2500,
+  "totalPages": 125,
+  "number": 0,
+  "size": 20
+}
+```
+
+---
+
+### 3.2 GET /api/stocks/search
+종목명 또는 종목코드로 검색합니다.
+
+**Query Parameters:**
+| 이름 | 타입 | 필수 | 설명 |
+|------|------|------|------|
+| `query` | string | ✅ | 검색어 |
+| `page` | int | ❌ | 페이지 번호 |
+| `size` | int | ❌ | 페이지 크기 |
+
+**Response:** `Page<StockCatalogResponse>` (동일)
+
+---
+
+### 3.3 POST /api/stocks/sync
+KIS API에서 국내 전체 종목 마스터를 동기화합니다. (신규 INSERT, 기존 UPDATE)
+
+**Required Role:** `ADMIN`
+
+**Response:**
+- `200 OK` — 신규 동기화된 종목 수 (integer)
+
+---
+
+## 4. 주식 시세
+
+**Base Path:** `/api/stocks`
+
+| Method | Path | 설명 | Auth |
+|--------|------|------|------|
+| `GET` | `/api/stocks/{stockCode}/price` | 현재가 조회 | ❌ Public |
+| `POST` | `/api/stocks/daily` | 일별/주별/월별/년별 시세 조회 | ✅ JWT |
+| `GET` | `/api/stocks/{stockCode}/minute` | 분봉 시세 조회 | ❌ Public |
+
+### 4.1 GET /api/stocks/{stockCode}/price
 특정 종목의 **현재가 및 기본 정보**를 조회합니다.
 
 **Path Variable:**
@@ -152,7 +222,7 @@ KIS 실시간 시세 WebSocket 연결용 Key를 발급합니다.
 
 ---
 
-### 3.2 POST /api/stocks/daily
+### 4.2 POST /api/stocks/daily
 특정 종목의 **기간별(일/주/월/년) 시세**를 조회합니다.
 
 **Request Body:** `DailyPriceRequest`
@@ -196,7 +266,7 @@ KIS 실시간 시세 WebSocket 연결용 Key를 발급합니다.
 
 ---
 
-### 3.3 GET /api/stocks/{stockCode}/minute
+### 4.3 GET /api/stocks/{stockCode}/minute
 특정 종목의 **분봉(1분 단위) 시세**를 조회합니다.
 
 **Path Variable:**
@@ -223,7 +293,7 @@ KIS 실시간 시세 WebSocket 연결용 Key를 발급합니다.
 
 ---
 
-## 4. 계좌 조회
+## 5. 계좌 조회
 
 **Base Path:** `/api/account`
 
@@ -236,7 +306,7 @@ KIS 실시간 시세 WebSocket 연결용 Key를 발급합니다.
 | `GET` | `/api/account/realized-profit` | 실현손익 내역 조회 | ✅ JWT |
 | `POST` | `/api/account/buying-power` | 매수가능금액 조회 | ✅ JWT |
 
-### 4.1 GET /api/account/balance
+### 5.1 GET /api/account/balance
 보유 중인 **모든 종목의 상세 잔고**를 조회합니다.
 
 **Response:** `List<BalanceItem>`
@@ -262,7 +332,7 @@ KIS 실시간 시세 WebSocket 연결용 Key를 발급합니다.
 
 ---
 
-### 4.2 GET /api/account/balance/summary
+### 5.2 GET /api/account/balance/summary
 계좌 전체의 **잔고 요약 정보**를 조회합니다.
 
 **Response:** `BalanceSummary`
@@ -289,7 +359,7 @@ KIS 실시간 시세 WebSocket 연결용 Key를 발급합니다.
 
 ---
 
-### 4.3 GET /api/account/realized-profit
+### 5.3 GET /api/account/realized-profit
 **실현손익(체결 완료된 매매) 내역**을 조회합니다.
 
 **Response:** `List<RealizedProfitItem>`
@@ -315,7 +385,7 @@ KIS 실시간 시세 WebSocket 연결용 Key를 발급합니다.
 
 ---
 
-### 4.4 POST /api/account/buying-power
+### 5.4 POST /api/account/buying-power
 특정 종목에 대한 **매수 가능 금액/수량**을 조회합니다.
 
 **Request Body:** `BuyingPowerRequest`
@@ -341,7 +411,7 @@ KIS 실시간 시세 WebSocket 연결용 Key를 발급합니다.
 
 ---
 
-## 5. 주문
+## 6. 주문
 
 **Base Path:** `/api/orders`
 
@@ -352,7 +422,7 @@ KIS 실시간 시세 WebSocket 연결용 Key를 발급합니다.
 | `POST` | `/api/orders/buy` | 매수 주문 | ✅ JWT |
 | `POST` | `/api/orders/sell` | 매도 주문 | ✅ JWT |
 
-### 5.1 POST /api/orders/buy
+### 6.1 POST /api/orders/buy
 **매수 주문**을 전송합니다.
 
 **Request Body:** `OrderRequestDto`
@@ -383,7 +453,7 @@ KIS 실시간 시세 WebSocket 연결용 Key를 발급합니다.
 
 ---
 
-### 5.2 POST /api/orders/sell
+### 6.2 POST /api/orders/sell
 **매도 주문**을 전송합니다.
 
 **Request Body:** `OrderRequestDto`
@@ -399,9 +469,240 @@ KIS 실시간 시세 WebSocket 연결용 Key를 발급합니다.
 
 ---
 
-## 6. 요청/응답 DTO 정의
+## 7. 해외 종목 카탈로그
 
-### 6.1 요청 DTO (Request)
+**Base Path:** `/api/overseas-stocks`
+
+| Method | Path | 설명 | Auth |
+|--------|------|------|------|
+| `GET` | `/api/overseas-stocks` | 전체 해외 종목 목록 (페이지네이션) | ❌ Public |
+| `GET` | `/api/overseas-stocks/search?query=` | 해외 종목 검색 (이름/티커) | ❌ Public |
+| `GET` | `/api/overseas-stocks/{ticker}/price?exchange=` | 해외 종목 실시간 시세 | ❌ Public |
+| `POST` | `/api/overseas-stocks/sync` | KIS 해외 종목 마스터 동기화 (관리자) | ✅ JWT (ADMIN) |
+
+### 7.1 GET /api/overseas-stocks
+전체 해외 종목 목록을 페이지네이션으로 조회합니다.
+
+**Query Parameters:**
+| 이름 | 타입 | 필수 | 설명 | 예시 |
+|------|------|------|------|------|
+| `exchangeCode` | string | ❌ | 거래소코드 (NAS, NYS, AMS, HKQ, TKY, SHH, SHZ, HXK) | `NAS` |
+| `country` | string | ❌ | 국가 (US, JP, HK, CN) | `US` |
+| `page` | int | ❌ | 페이지 번호 (0부터) | `0` |
+| `size` | int | ❌ | 페이지 크기 (기본 20) | `20` |
+
+**Response:** `Page<OverseasStockCatalogResponse>`
+```json
+{
+  "content": [
+    {
+      "ticker": "AAPL",
+      "name": "Apple Inc.",
+      "exchangeCode": "NAS",
+      "country": "US",
+      "sector": "Technology",
+      "currency": "USD"
+    }
+  ],
+  "totalElements": 5000,
+  "totalPages": 250,
+  "number": 0,
+  "size": 20
+}
+```
+
+---
+
+### 7.2 GET /api/overseas-stocks/search
+해외 종목명 또는 티커로 검색합니다.
+
+**Query Parameters:**
+| 이름 | 타입 | 필수 | 설명 |
+|------|------|------|------|
+| `query` | string | ✅ | 검색어 |
+| `page` | int | ❌ | 페이지 번호 |
+| `size` | int | ❌ | 페이지 크기 |
+
+**Response:** `Page<OverseasStockCatalogResponse>` (동일)
+
+---
+
+### 7.3 GET /api/overseas-stocks/{ticker}/price
+해외 종목의 실시간 시세를 KIS API에서 조회합니다. (캐싱 없음, 항상 실시간)
+
+**Path Variable:**
+| 이름 | 타입 | 설명 | 예시 |
+|------|------|------|------|
+| `ticker` | string | 해외 종목코드 | `AAPL` |
+
+**Query Parameters:**
+| 이름 | 타입 | 필수 | 설명 | 예시 |
+|------|------|------|------|------|
+| `exchange` | string | ✅ | 거래소코드 | `NAS` |
+
+**Response:** `OverseasStockPriceResponse`
+```json
+{
+  "ovrs_nmix_prpr": "185.50",
+  "ovrs_nmix_prdy_vrss": "2.30",
+  "prdy_vrss_sign": "2",
+  "prdy_ctrt": "1.26",
+  "ovrs_icod": "NAS",
+  "symb": "AAPL",
+  "item_name": "Apple Inc.",
+  "ovrs_hgpr": "186.80",
+  "ovrs_lwpr": "183.20",
+  "ovrs_oprc": "183.90",
+  "acml_vol": "52345678",
+  "psvs_clos": "183.20",
+  "tr_52w_hgpr": "199.62",
+  "tr_52w_lwpr": "143.90"
+}
+```
+
+---
+
+### 7.4 POST /api/overseas-stocks/sync
+KIS API에서 해외 전체 종목 마스터를 동기화합니다.
+
+**Required Role:** `ADMIN`
+
+**Response:**
+- `200 OK` — 신규 동기화된 종목 수 (integer)
+
+---
+
+## 8. 해외 시세
+
+> 해외 시세는 실시간 KIS API를 직접 호출하며, 캐싱하지 않습니다.
+
+**Base Path:** `/api/overseas-stocks`
+
+| Method | Path | 설명 | Auth |
+|--------|------|------|------|
+| `GET` | `/api/overseas-stocks/{ticker}/price?exchange=` | 해외 종목 현재가 | ❌ Public |
+
+---
+
+## 9. 해외 주문
+
+**Base Path:** `/api/overseas-orders`
+
+| Method | Path | 설명 | Auth |
+|--------|------|------|------|
+| `POST` | `/api/overseas-orders/buy` | 해외 매수 주문 | ✅ JWT |
+| `POST` | `/api/overseas-orders/sell` | 해외 매도 주문 | ✅ JWT |
+
+### 9.1 POST /api/overseas-orders/buy
+해외 주식 매수 주문을 전송합니다.
+
+**Request Body:** `OverseasOrderRequestDto`
+```json
+{
+  "ticker": "AAPL",
+  "exchangeCode": "NAS",
+  "quantity": 10,
+  "price": 0
+}
+```
+
+| 필드 | 타입 | 필수 | 설명 |
+|------|------|------|------|
+| `ticker` | string | ✅ | 해외 종목코드 |
+| `exchangeCode` | string | ✅ | 거래소코드 (NAS, NYS, AMS, HKQ, TKY, SHH, SHZ, HXK) |
+| `quantity` | int | ✅ | 주문수량 (1 이상) |
+| `price` | int | ✅ | 주문단가. `0`이면 **시장가** |
+
+**Response:** `OverseasOrderResponse`
+```json
+{
+  "KRX_FWDG_ORD_ORGNO": "KRX12345",
+  "ODNO": "0000012345",
+  "ORD_TMD": "220030"
+}
+```
+
+---
+
+### 9.2 POST /api/overseas-orders/sell
+해외 주식 매도 주문을 전송합니다.
+
+**Request Body:** `OverseasOrderRequestDto` (동일)
+
+**Response:** `OverseasOrderResponse` (동일)
+
+---
+
+## 10. 해외 계좌 조회
+
+**Base Path:** `/api/overseas-account`
+
+| Method | Path | 설명 | Auth |
+|--------|------|------|------|
+| `GET` | `/api/overseas-account/balance` | 해외 잔고 조회 | ✅ JWT |
+| `GET` | `/api/overseas-account/balance/summary` | 해외 잔고 요약 | ✅ JWT |
+| `POST` | `/api/overseas-account/buying-power` | 해외 매수가능금액 조회 | ✅ JWT |
+
+### 10.1 GET /api/overseas-account/balance
+해외 보유 종목의 상세 잔고를 조회합니다.
+
+**Response:** `OverseasBalanceResponse`
+```json
+{
+  "output1": [
+    {
+      "ovrs_pdno": "AAPL",
+      "ovrs_item_name": "Apple Inc.",
+      "ovrs_cblc_qty": "10",
+      "pchs_avg_pric": "175.50",
+      "ovrs_stck_prpr": "185.50",
+      "frcr_evlu_pfls_amt": "100.00",
+      "evlu_pfls_rt": "5.70",
+      "ovrs_excg_cd": "NAS",
+      "tr_natn_cd": "US"
+    }
+  ],
+  "output2": {
+    "tot_evlu_amt": "1855.00",
+    "frcr_evlu_pfls_amt": "100.00",
+    "tot_frcr_evlu_pfls_amt": "100.00",
+    "ovrs_tot_pchs_amt": "1755.00",
+    "ovrs_rlzt_pfls": "0"
+  }
+}
+```
+
+---
+
+### 10.2 GET /api/overseas-account/balance/summary
+해외 계좌 전체의 잔고 요약 정보를 조회합니다.
+
+**Response:** `OverseasBalanceResponse` (동일, output2 활용)
+
+---
+
+### 10.3 POST /api/overseas-account/buying-power
+해외 주문 가능 금액을 조회합니다.
+
+**Query Parameters:**
+| 이름 | 타입 | 필수 | 설명 | 예시 |
+|------|------|------|------|------|
+| `exchangeCode` | string | ✅ | 거래소코드 | `NAS` |
+
+**Response:** `OverseasBuyingPowerResponse`
+```json
+{
+  "max_buy_amt": "50000.00",
+  "max_buy_qty": "269",
+  "ord_psbl_cash": "50000.00",
+  "frcr_ord_psbl_amt": "50000.00",
+  "ovrs_ord_psbl_amt": "50000.00"
+}
+```
+
+---
+
+### 11.1 요청 DTO (Request)
 
 #### SignupRequest
 ```json
@@ -446,9 +747,19 @@ KIS 실시간 시세 WebSocket 연결용 Key를 발급합니다.
 }
 ```
 
+#### OverseasOrderRequestDto
+```json
+{
+  "ticker": "string",       // 해외 종목코드 (예: AAPL)
+  "exchangeCode": "string", // 거래소코드 (NAS, NYS, AMS, HKQ, TKY, SHH, SHZ, HXK)
+  "quantity": 0,            // 주문수량 (1 이상)
+  "price": 0                // 주문단가 (0: 시장가)
+}
+```
+
 ---
 
-### 6.2 응답 DTO (Response)
+### 11.2 응답 DTO (Response)
 
 #### TokenResponse
 ```json
@@ -603,9 +914,97 @@ KIS 실시간 시세 WebSocket 연결용 Key를 발급합니다.
 }
 ```
 
+#### StockCatalogResponse
+```json
+{
+  "stockCode": "string",    // 종목코드 (예: 005930)
+  "name": "string",         // 종목명 (예: 삼성전자)
+  "sector": "string",       // 섹터 (예: 반도체)
+  "marketType": "string"    // 시장구분 (KOSPI / KOSDAQ)
+}
+```
+
+#### OverseasStockCatalogResponse
+```json
+{
+  "ticker": "string",        // 해외 종목코드 (예: AAPL)
+  "name": "string",          // 종목명 (예: Apple Inc.)
+  "exchangeCode": "string",  // 거래소코드 (NAS, NYS, AMS, HKQ, TKY, SHH, SHZ, HXK)
+  "country": "string",       // 국가 (US, JP, HK, CN)
+  "sector": "string",        // 섹터
+  "currency": "string"       // 통화 (USD, JPY, HKD, CNY)
+}
+```
+
+#### OverseasStockPriceResponse
+```json
+{
+  "ovrs_nmix_prpr": "string",       // 해외현재가
+  "ovrs_nmix_prdy_vrss": "string",  // 해외전일대비
+  "prdy_vrss_sign": "string",       // 전일대비부호
+  "prdy_ctrt": "string",            // 전일대비율
+  "ovrs_icod": "string",            // 해외거래소코드
+  "symb": "string",                 // 종목코드
+  "item_name": "string",            // 종목명
+  "ovrs_hgpr": "string",            // 해외최고가
+  "ovrs_lwpr": "string",            // 해외최저가
+  "ovrs_oprc": "string",            // 해외시가
+  "acml_vol": "string",             // 누적거래량
+  "psvs_clos": "string",            // 전일종가
+  "tr_52w_hgpr": "string",          // 52주최고가
+  "tr_52w_lwpr": "string"           // 52주최저가
+}
+```
+
+#### OverseasOrderResponse
+```json
+{
+  "KRX_FWDG_ORD_ORGNO": "string", // 주문시한국거래소부구분조직번호
+  "ODNO": "string",               // 주문번호
+  "ORD_TMD": "string"             // 주문시각 (HHMMSS)
+}
+```
+
+#### OverseasBalanceItem
+```json
+{
+  "ovrs_pdno": "string",           // 해외종목번호
+  "ovrs_item_name": "string",      // 해외종목명
+  "ovrs_cblc_qty": "string",       // 해외잔고수량
+  "pchs_avg_pric": "string",       // 매입평균가격
+  "ovrs_stck_prpr": "string",      // 해외주식현재가
+  "frcr_evlu_pfls_amt": "string",  // 외화평가손익금액
+  "evlu_pfls_rt": "string",        // 평가손익율
+  "ovrs_excg_cd": "string",        // 해외거래소코드
+  "tr_natn_cd": "string"           // 거래국가코드
+}
+```
+
+#### OverseasBalanceSummary
+```json
+{
+  "tot_evlu_amt": "string",          // 총평가금액
+  "frcr_evlu_pfls_amt": "string",    // 외화평가손익금액
+  "tot_frcr_evlu_pfls_amt": "string",// 총외화평가손익금액
+  "ovrs_tot_pchs_amt": "string",     // 해외총매입금액
+  "ovrs_rlzt_pfls": "string"         // 해외실현손익
+}
+```
+
+#### OverseasBuyingPowerResponse
+```json
+{
+  "max_buy_amt": "string",          // 최대매수가능금액
+  "max_buy_qty": "string",          // 최대매수가능수량
+  "ord_psbl_cash": "string",        // 주문가능현금
+  "frcr_ord_psbl_amt": "string",    // 외화주문가능금액
+  "ovrs_ord_psbl_amt": "string"     // 해외주문가능금액
+}
+```
+
 ---
 
-## 7. 에러 코드
+## 12. 에러 코드
 
 > 형식: `{도메인}_{번호}`
 
@@ -616,16 +1015,20 @@ KIS 실시간 시세 WebSocket 연결용 Key를 발급합니다.
 | `AUTH_005` | 이메일 중복 | 409 |
 | `USER_001` | 사용자 없음 | 404 |
 | `STOCK_001` | 종목 없음 | 404 |
+| `OVERSEAS_001` | 해외 종목 없음 | 404 |
+| `OVERSEAS_002` | 해외 주문 실패 | 400 |
 | `SYSTEM_002` | 내부 서버 오류 | 500 |
 
 ---
 
-## 8. 참고 사항
+## 참고 사항
 
 - **JWT 인증:** 모든 보호된 엔드포인트는 `Authorization: Bearer <accessToken>` 헤더가 필요합니다.
-- **KIS API 연동:** `/api/account/*`, `/api/orders/*`, `/api/stocks/*` 엔드포인트는 KIS(한국투자증권) Open API를 호출합니다.
-- **시장가 주문:** `OrderRequestDto.price = 0` 으로 설정하면 시장가 주문이 됩니다.
+- **KIS API 연동:** `/api/account/*`, `/api/orders/*`, `/api/stocks/*`, `/api/overseas-stocks/*`, `/api/overseas-orders/*`, `/api/overseas-account/*` 엔드포인트는 KIS(한국투자증권) Open API를 호출합니다.
+- **시장가 주문:** `OrderRequestDto.price = 0` 또는 `OverseasOrderRequestDto.price = 0` 으로 설정하면 시장가 주문이 됩니다.
 - **String 타입 주의:** KIS API 응답의 대부분 수치 데이터는 `string` 타입으로 전달됩니다. 프론트엔드에서 필요시 `Number()` 변환을 해주세요.
+- **해외 거래소코드 매핑:** NAS=NASDAQ, NYS=NYSE, AMS=AMEX, HKQ=홍콩, TKY=도쿄, SHH=상해, SHZ=심천, HXK=홍콩ETF
+- **관리자 권한:** `POST /api/stocks/sync`, `POST /api/overseas-stocks/sync` 엔드포인트는 ADMIN 역할이 필요합니다.
 
 ---
 

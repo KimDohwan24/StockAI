@@ -1,6 +1,7 @@
 # AGENT.md - stock-frontend
 
 > AI 뉴스 기반 주식 추천 서비스의 **프론트엔드 웹 애플리케이션** (Next.js 16 App Router)
+> 이 폴더의 AGENT.md는 **FrontEnd** 전용임. BE에 관련되어서는 BE의 AGENT.md를 확인하라.
 
 ---
 

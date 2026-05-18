@@ -31,6 +31,21 @@ function addCandlestickSeriesCompat(chart: IChartApi, options?: object) {
   }
 }
 
+function isKoreanMarketOpen(): boolean {
+  const now = new Date();
+  const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
+  const kst = new Date(utc + (3600000 * 9));
+  
+  const day = kst.getDay();
+  if (day === 0 || day === 6) return false;
+  
+  const hours = kst.getHours();
+  const minutes = kst.getMinutes();
+  const currentTime = hours * 100 + minutes;
+  
+  return currentTime >= 900 && currentTime <= 1530;
+}
+
 export interface AreaPoint {
   time: Time;
   value: number;
@@ -182,6 +197,7 @@ export default function StockChart({
 
   useEffect(() => {
     if (realtimePrice == null || !seriesRef.current || !lastCandleRef.current) return;
+    if (!isKoreanMarketOpen()) return;
 
     const last = lastCandleRef.current;
     const time = (last as CandlePoint).time ?? (last as AreaPoint).time;

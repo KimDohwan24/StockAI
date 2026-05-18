@@ -5,12 +5,16 @@ import {
   createChart,
   ColorType,
   IChartApi,
+  ISeriesApi,
   AreaSeries,
   CandlestickSeries,
   Time,
+  CandlestickData,
+  SingleValueData,
 } from 'lightweight-charts';
 
-// lightweight-charts v5 compatible series creation
+type SeriesType = ISeriesApi<'Candlestick'> | ISeriesApi<'Area'>;
+
 function addAreaSeriesCompat(chart: IChartApi, options: object) {
   try {
     return chart.addSeries(AreaSeries, options);
@@ -45,6 +49,7 @@ interface StockChartProps {
   type?: 'area' | 'candlestick';
   color?: string;
   height?: number;
+  realtimePrice?: number;
 }
 
 function isCandleData(data: AreaPoint[] | CandlePoint[]): data is CandlePoint[] {
@@ -56,9 +61,12 @@ export default function StockChart({
   type = 'area',
   color = '#0064e0',
   height,
+  realtimePrice,
 }: StockChartProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
+  const seriesRef = useRef<SeriesType | null>(null);
+  const lastCandleRef = useRef<CandlePoint | AreaPoint | null>(null);
   const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
@@ -72,7 +80,6 @@ export default function StockChart({
       const w = chartContainerRef.current.clientWidth;
       const h = height ?? chartContainerRef.current.clientHeight;
 
-      // 크기가 아직 확정되지 않았으면 다음 프레임에서 다시 시도
       if (w === 0 || h === 0) {
         requestAnimationFrame(initChart);
         return;
@@ -122,6 +129,10 @@ export default function StockChart({
           close: d.close,
         }));
         series.setData(mapped);
+        seriesRef.current = series as unknown as SeriesType;
+        if (data.length > 0) {
+          lastCandleRef.current = data[data.length - 1];
+        }
       } else {
         const series = addAreaSeriesCompat(chart, {
           lineColor: color,
@@ -130,6 +141,10 @@ export default function StockChart({
           lineWidth: 2,
         });
         series.setData(data as AreaPoint[]);
+        seriesRef.current = series as unknown as SeriesType;
+        if (data.length > 0) {
+          lastCandleRef.current = data[data.length - 1];
+        }
       }
 
       chart.timeScale().fitContent();
@@ -139,7 +154,6 @@ export default function StockChart({
 
     initChart();
 
-    // 컨테이너 자체 크기 변화를 감지해 차트 크기 동기화
     const resizeObserver = new ResizeObserver(() => {
       if (chartRef.current && chartContainerRef.current) {
         chartRef.current.applyOptions({
@@ -160,9 +174,43 @@ export default function StockChart({
         chartRef.current.remove();
         chartRef.current = null;
       }
+      seriesRef.current = null;
+      lastCandleRef.current = null;
       setIsReady(false);
     };
   }, [data, color, type, height]);
+
+  useEffect(() => {
+    if (realtimePrice == null || !seriesRef.current || !lastCandleRef.current) return;
+
+    const last = lastCandleRef.current;
+    const time = (last as CandlePoint).time ?? (last as AreaPoint).time;
+
+    if (type === 'candlestick' && isCandleData([last as CandlePoint])) {
+      const candleLast = last as CandlePoint;
+      const updated: CandlestickData<Time> = {
+        time: candleLast.time as Time,
+        open: candleLast.open,
+        high: Math.max(candleLast.high, realtimePrice),
+        low: Math.min(candleLast.low, realtimePrice),
+        close: realtimePrice,
+      };
+      (seriesRef.current as unknown as ISeriesApi<'Candlestick'>).update(updated);
+      lastCandleRef.current = {
+        ...candleLast,
+        high: updated.high,
+        low: updated.low,
+        close: updated.close,
+      };
+    } else {
+      const updated: SingleValueData<Time> = {
+        time: time as Time,
+        value: realtimePrice,
+      };
+      (seriesRef.current as unknown as ISeriesApi<'Area'>).update(updated);
+      lastCandleRef.current = { time: time as Time, value: realtimePrice };
+    }
+  }, [realtimePrice, type]);
 
   return (
     <div

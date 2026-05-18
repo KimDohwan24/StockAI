@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import useSWR, { mutate } from 'swr';
@@ -61,6 +61,32 @@ function PriceIcon({ info }: { info: MappedStockPrice | null }) {
   return <TrendingDown className="w-5 h-5" />;
 }
 
+function usePriceFlash(price: number | undefined) {
+  const [flashKey, setFlashKey] = useState(0);
+  const [flashClass, setFlashClass] = useState('');
+  const prevPriceRef = useRef(price);
+
+  useEffect(() => {
+    if (price !== undefined && prevPriceRef.current !== undefined && price !== prevPriceRef.current) {
+      const isUp = price > prevPriceRef.current;
+      setFlashClass(isUp ? 'animate-flash-up' : 'animate-flash-down');
+      setFlashKey(k => k + 1);
+      
+      const timer = setTimeout(() => {
+        setFlashClass('');
+      }, 600);
+      
+      prevPriceRef.current = price;
+      return () => clearTimeout(timer);
+    }
+    if (price !== undefined) {
+      prevPriceRef.current = price;
+    }
+  }, [price]);
+
+  return { flashKey, flashClass };
+}
+
 function TradePanel({
   stockCode,
   priceInfo,
@@ -77,6 +103,7 @@ function TradePanel({
 
   const currentPrice = priceInfo?.price ?? 0;
   const totalAmount = currentPrice * quantity;
+  const { flashKey, flashClass } = usePriceFlash(currentPrice);
 
   const { data: holdings } = useSWR(
     isAuthenticated ? 'dashboard-holdings' : null,
@@ -192,7 +219,7 @@ function TradePanel({
       <div className="bg-surface-soft rounded-meta-xl px-4 py-3">
         <div className="flex justify-between text-sm">
           <span className="text-steel">체결가 (현재가)</span>
-          <span className="font-bold text-ink">{fmt(currentPrice)}원</span>
+          <span key={flashKey} className={`font-bold text-ink px-1 rounded transition-colors ${flashClass}`}>{fmt(currentPrice)}원</span>
         </div>
         <div className="flex justify-between text-sm mt-1">
           <span className="text-steel">주문 금액</span>
@@ -238,13 +265,15 @@ export default function StockDetailPage() {
   const { data: swrPrice } = useSWR<MappedStockPrice | null>(
     stockCode ? `detail-price-${stockCode}` : null,
     () => getStockPrice(stockCode),
-    { dedupingInterval: 30000, revalidateOnFocus: false }
+    { dedupingInterval: 30000, revalidateOnFocus: false, refreshInterval: 30000 }
   );
 
   const { price: wsPrice } = useStockPriceStream(stockCode, swrPrice ?? null);
 
   const priceInfo = wsPrice ?? swrPrice ?? null;
   const stockName = priceInfo?.stockName || stockCode;
+
+  const { flashKey, flashClass } = usePriceFlash(priceInfo?.price);
 
   const [period, setPeriod] = useState<Period>('D');
   const [viewMode, setViewMode] = useState<'daily' | 'minute'>('daily');
@@ -274,13 +303,13 @@ export default function StockDetailPage() {
   const { data: dailyCandles, isLoading: dailyLoading, error: dailyError } = useSWR<MappedDailyCandle[]>(
     stockCode && viewMode === 'daily' ? ['daily-candles', stockCode, period, dateRange.startDate, dateRange.endDate] : null,
     () => getDailyCandles({ stockCode, period, startDate: dateRange.startDate, endDate: dateRange.endDate }),
-    { keepPreviousData: true }
+    { keepPreviousData: true, refreshInterval: 60000 }
   );
 
   const { data: minuteCandles, isLoading: minuteLoading, error: minuteError } = useSWR<MappedMinuteCandle[]>(
     stockCode && viewMode === 'minute' ? ['minute-candles', stockCode] : null,
     () => getMinuteCandles(stockCode),
-    { keepPreviousData: true }
+    { keepPreviousData: true, refreshInterval: 15000 }
   );
 
   const candles = viewMode === 'daily' ? (dailyCandles ?? []) : [];
@@ -326,7 +355,7 @@ export default function StockDetailPage() {
                     <Activity className="w-4 h-4" />
                     현재가
                   </p>
-                  <div className="flex items-baseline gap-2">
+                  <div key={flashKey} className={`flex items-baseline gap-2 rounded-lg px-2 py-1 -mx-2 transition-colors ${flashClass}`}>
                     <p className={`text-5xl font-extrabold tracking-tight ${colorClass}`}>
                       {priceInfo ? fmt(priceInfo.price) : '—'}
                     </p>
@@ -381,15 +410,15 @@ export default function StockDetailPage() {
             {/* Detail Grid */}
             {priceInfo && (
               <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                <InfoCard icon={<Landmark className="w-4 h-4" />} label="기준가 / 전일종가" value={fmt(priceInfo.basePrice)} sub="전일대비 기준" />
-                <InfoCard icon={<ArrowUpRight className="w-4 h-4 text-market-up" />} label="상한가" value={fmt(priceInfo.upperLimit)} highlight="up" />
-                <InfoCard icon={<ArrowDownRight className="w-4 h-4 text-market-down" />} label="하한가" value={fmt(priceInfo.lowerLimit)} highlight="down" />
-                <InfoCard icon={<BarChart3 className="w-4 h-4" />} label="누적거래대금" value={`${fmt(priceInfo.volumeValue)} 원`} sub="당일" />
-                <InfoCard icon={<Hash className="w-4 h-4" />} label="PER / PBR" value={`${priceInfo.per.toFixed(2)} / ${priceInfo.pbr.toFixed(2)}`} />
-                <InfoCard icon={<Hash className="w-4 h-4" />} label="EPS / BPS" value={`${fmt(priceInfo.eps)} / ${fmt(priceInfo.bps)}`} />
-                <InfoCard icon={<TrendingUp className="w-4 h-4 text-market-up" />} label="52주 최고" value={fmt(priceInfo.w52High)} highlight="up" />
-                <InfoCard icon={<TrendingDown className="w-4 h-4 text-market-down" />} label="52주 최저" value={fmt(priceInfo.w52Low)} highlight="down" />
-                <InfoCard icon={<Landmark className="w-4 h-4" />} label="시가총액" value={`${fmt(priceInfo.marketCap)} 억원`} sub="HTS 기준" className="md:col-span-2 lg:col-span-4" />
+                <InfoCard icon={<Landmark className="w-4 h-4" />} label="기준가 / 전일종가" value={fmt(priceInfo.basePrice ?? 0)} sub="전일대비 기준" />
+                <InfoCard icon={<ArrowUpRight className="w-4 h-4 text-market-up" />} label="상한가" value={fmt(priceInfo.upperLimit ?? 0)} highlight="up" />
+                <InfoCard icon={<ArrowDownRight className="w-4 h-4 text-market-down" />} label="하한가" value={fmt(priceInfo.lowerLimit ?? 0)} highlight="down" />
+                <InfoCard icon={<BarChart3 className="w-4 h-4" />} label="누적거래대금" value={`${fmt(priceInfo.volumeValue ?? 0)} 원`} sub="당일" />
+                <InfoCard icon={<Hash className="w-4 h-4" />} label="PER / PBR" value={`${(priceInfo.per ?? 0).toFixed(2)} / ${(priceInfo.pbr ?? 0).toFixed(2)}`} />
+                <InfoCard icon={<Hash className="w-4 h-4" />} label="EPS / BPS" value={`${fmt(priceInfo.eps ?? 0)} / ${fmt(priceInfo.bps ?? 0)}`} />
+                <InfoCard icon={<TrendingUp className="w-4 h-4 text-market-up" />} label="52주 최고" value={fmt(priceInfo.w52High ?? 0)} highlight="up" />
+                <InfoCard icon={<TrendingDown className="w-4 h-4 text-market-down" />} label="52주 최저" value={fmt(priceInfo.w52Low ?? 0)} highlight="down" />
+                <InfoCard icon={<Landmark className="w-4 h-4" />} label="시가총액" value={`${fmt(priceInfo.marketCap ?? 0)} 억원`} sub="HTS 기준" className="md:col-span-2 lg:col-span-4" />
               </section>
             )}
 
@@ -441,7 +470,7 @@ export default function StockDetailPage() {
                   </div>
                 )}
                 {!loading && !error && chartData.length > 0 && (
-                  <StockChart data={chartData as CandlePoint[]} type="candlestick" height={400} />
+                  <StockChart data={chartData as CandlePoint[]} type="candlestick" height={400} realtimePrice={priceInfo?.price} />
                 )}
                 {!loading && !error && chartData.length === 0 && (
                   <div className="w-full h-full flex items-center justify-center text-steel">

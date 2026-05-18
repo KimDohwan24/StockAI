@@ -7,7 +7,29 @@ import type { RealtimeStockPriceDto } from '@/types/websocket';
 import type { MappedStockPrice } from '@/lib/api';
 import { num, parseSign } from '@/lib/fetcher';
 
-function mapRealtimeToMapped(dto: RealtimeStockPriceDto): MappedStockPrice {
+const STATIC_KEYS: (keyof MappedStockPrice)[] = [
+  'upperLimit', 'lowerLimit', 'basePrice',
+  'w52High', 'w52Low', 'per', 'pbr', 'eps', 'bps',
+  'marketCap', 'marketName', 'stockName',
+];
+
+function mergeDefined<T>(target: T, incoming: Partial<T>): T {
+  const result = { ...target } as Record<string, unknown>;
+  for (const [key, val] of Object.entries(incoming as Record<string, unknown>)) {
+    if (val !== undefined) result[key] = val;
+  }
+  return result as T;
+}
+
+function restoreStaticFields(current: MappedStockPrice, initial: MappedStockPrice): MappedStockPrice {
+  const result: Record<string, unknown> = { ...current };
+  for (const key of STATIC_KEYS) {
+    if (initial[key] !== undefined) result[key] = initial[key];
+  }
+  return result as unknown as MappedStockPrice;
+}
+
+function mapRealtimeToMapped(dto: RealtimeStockPriceDto): Partial<MappedStockPrice> {
   const signInfo = parseSign(dto.prdyVrssSign);
   const rawChange = num(dto.prdyVrss);
   const rawChangeRate = num(dto.prdyCtrt);
@@ -21,20 +43,8 @@ function mapRealtimeToMapped(dto: RealtimeStockPriceDto): MappedStockPrice {
     open: num(dto.stckOprc),
     high: num(dto.stckHgpr),
     low: num(dto.stckLwpr),
-    upperLimit: 0,
-    lowerLimit: 0,
-    basePrice: 0,
     volume: num(dto.acmlVol),
     volumeValue: num(dto.acmlTrPbmn),
-    w52High: 0,
-    w52Low: 0,
-    per: 0,
-    pbr: 0,
-    eps: 0,
-    bps: 0,
-    marketCap: 0,
-    marketName: '',
-    stockName: '',
     sign: dto.prdyVrssSign ?? '',
     ...signInfo,
   };
@@ -54,7 +64,7 @@ export function useStockPriceStream(
   const [reconnectCount, setReconnectCount] = useState(0);
   const subIdRef = useRef<string | null>(null);
   const mergedRef = useRef<MappedStockPrice | null>(initialPrice ?? null);
-  const initialPriceApplied = useRef(false);
+  const initialPriceRef = useRef<MappedStockPrice | null>(initialPrice ?? null);
 
   const handleMessageRef = useRef<(message: IMessage) => void>(() => {});
   handleMessageRef.current = (message: IMessage) => {
@@ -63,9 +73,11 @@ export function useStockPriceStream(
       const mapped = mapRealtimeToMapped(dto);
 
       if (mergedRef.current) {
-        mergedRef.current = { ...mergedRef.current, ...mapped };
+        mergedRef.current = mergeDefined(mergedRef.current, mapped);
+      } else if (initialPriceRef.current) {
+        mergedRef.current = mergeDefined(initialPriceRef.current, mapped);
       } else {
-        mergedRef.current = mapped;
+        mergedRef.current = mapped as MappedStockPrice;
       }
 
       setPrice({ ...mergedRef.current });
@@ -102,11 +114,16 @@ export function useStockPriceStream(
   }, [stockCode, reconnectCount, subscribe, unsubscribe, subscribeBePrice, unsubscribeBePrice, stableHandler]);
 
   useEffect(() => {
-    if (initialPrice && !initialPriceApplied.current) {
-      initialPriceApplied.current = true;
-      mergedRef.current = { ...initialPrice, ...mergedRef.current };
-      setPrice({ ...mergedRef.current });
+    if (!initialPrice) return;
+    initialPriceRef.current = initialPrice;
+
+    if (mergedRef.current) {
+      mergedRef.current = restoreStaticFields(mergedRef.current, initialPrice);
+    } else {
+      mergedRef.current = { ...initialPrice };
     }
+
+    setPrice({ ...mergedRef.current });
   }, [initialPrice]);
 
   return useMemo(() => ({ price, lastUpdated, reconnect }), [price, lastUpdated, reconnect]);
@@ -120,7 +137,6 @@ export function useStockPriceStreamBatch(
   const [prices, setPrices] = useState<Record<string, MappedStockPrice>>({});
   const subIdsRef = useRef<Map<string, string>>(new Map());
   const mergedRef = useRef<Record<string, MappedStockPrice>>({});
-  const prevInitialPricesRef = useRef<Record<string, MappedStockPrice>>({});
 
   const stableCodesKey = useMemo(() => [...stockCodes].sort().join(','), [stockCodes]);
 
@@ -149,10 +165,10 @@ export function useStockPriceStreamBatch(
           if (mergedRef.current[code]) {
             mergedRef.current = {
               ...mergedRef.current,
-              [code]: { ...mergedRef.current[code], ...mapped },
+              [code]: mergeDefined(mergedRef.current[code], mapped),
             };
           } else {
-            mergedRef.current = { ...mergedRef.current, [code]: mapped };
+            mergedRef.current = { ...mergedRef.current, [code]: mapped as MappedStockPrice };
           }
 
           setPrices({ ...mergedRef.current });
@@ -180,29 +196,22 @@ export function useStockPriceStreamBatch(
   useEffect(() => {
     if (!initialPrices || Object.keys(initialPrices).length === 0) return;
 
-    const prevLen = Object.keys(prevInitialPricesRef.current).length;
-    const currLen = Object.keys(initialPrices).length;
+    const updated = { ...mergedRef.current };
+    let changed = false;
 
-    if (currLen > prevLen) {
-      prevInitialPricesRef.current = { ...initialPrices };
-      const updated = { ...mergedRef.current };
-      let changed = false;
-
-      for (const [code, price] of Object.entries(initialPrices)) {
-        if (!updated[code]) {
-          updated[code] = price;
-          changed = true;
-        } else {
-          const merged = { ...price, ...updated[code] };
-          updated[code] = merged;
-          changed = true;
-        }
+    for (const [code, price] of Object.entries(initialPrices)) {
+      if (!updated[code]) {
+        updated[code] = price;
+        changed = true;
+      } else {
+        updated[code] = restoreStaticFields(updated[code], price);
+        changed = true;
       }
+    }
 
-      if (changed) {
-        mergedRef.current = updated;
-        setPrices({ ...mergedRef.current });
-      }
+    if (changed) {
+      mergedRef.current = updated;
+      setPrices({ ...mergedRef.current });
     }
   }, [initialPrices]);
 

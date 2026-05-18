@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useCallback, useMemo, useEffect } from 'react';
+import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import useSWR from 'swr';
-import { getStocks, extractInitialPricesFromCatalog } from '@/services/stockCatalogApi';
+import { getStocks, extractInitialPricesFromCatalog, getBatchStockPrices } from '@/services/stockCatalogApi';
 import { useStockPriceStreamBatch } from '@/hooks/useStockPriceStream';
 import StockCatalogCard from '@/components/stocks/StockCatalogCard';
 import LoadMore from '@/components/stocks/LoadMore';
@@ -103,12 +103,17 @@ export default function StockCatalogInfinite({
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [prevFilterKey, setPrevFilterKey] = useState(filterKeyStr);
   const [catalogPrices, setCatalogPrices] = useState<Record<string, MappedStockPrice>>(initialPrices ?? {});
+  const [fetchedPrices, setFetchedPrices] = useState<Record<string, MappedStockPrice>>({});
+  const [isFetchingPrices, setIsFetchingPrices] = useState(false);
+  const attemptedCodes = useRef<Set<string>>(new Set());
 
   if (prevFilterKey !== filterKeyStr) {
     setPrevFilterKey(filterKeyStr);
     setCurrentPage(0);
     setLoadedPages([initialData]);
     setCatalogPrices(initialPrices ?? {});
+    setFetchedPrices({});
+    attemptedCodes.current.clear();
   }
 
   const nextPage = currentPage + 1;
@@ -133,9 +138,28 @@ export default function StockCatalogInfinite({
 
   const wsPrices = useStockPriceStreamBatch(allStockCodes, catalogPrices);
 
+  useEffect(() => {
+    const toFetch = allStockCodes.filter(
+      (code) => !catalogPrices[code] && !fetchedPrices[code] && !attemptedCodes.current.has(code)
+    );
+
+    if (toFetch.length === 0) return;
+
+    toFetch.forEach((c) => attemptedCodes.current.add(c));
+    setIsFetchingPrices(true);
+
+    getBatchStockPrices(toFetch).then((newPrices) => {
+      if (Object.keys(newPrices).length > 0) {
+        setFetchedPrices((prev) => ({ ...prev, ...newPrices }));
+      }
+    }).finally(() => {
+      setIsFetchingPrices(false);
+    });
+  }, [allStockCodes, catalogPrices, fetchedPrices]);
+
   const mergedPrices = useMemo(
-    () => ({ ...catalogPrices, ...wsPrices }),
-    [catalogPrices, wsPrices]
+    () => ({ ...catalogPrices, ...fetchedPrices, ...wsPrices }),
+    [catalogPrices, fetchedPrices, wsPrices]
   );
 
   const prefetchKey = hasNext && !isLoadingMore
@@ -195,7 +219,7 @@ export default function StockCatalogInfinite({
         </div>
       )}
 
-      <LoadMore onLoadMore={loadMore} hasMore={hasNext} isLoading={isLoadingMore} />
+      <LoadMore onLoadMore={loadMore} hasMore={hasNext} isLoading={isLoadingMore || isFetchingPrices} />
     </>
   );
 }

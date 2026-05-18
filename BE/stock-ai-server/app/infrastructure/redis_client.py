@@ -12,7 +12,7 @@ class RedisClient:
         self._client: redis.Redis | None = None
 
     async def connect(self):
-        self._client = await redis.from_url(self.url, decode_responses=True)
+        self._client = redis.from_url(self.url, decode_responses=True)
         logger.info("Redis connected")
 
     async def disconnect(self):

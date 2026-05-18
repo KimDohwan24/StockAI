@@ -1,17 +1,16 @@
 'use client';
 
-import { useState, useCallback, useMemo, useReducer, useEffect, useRef } from 'react';
+import { useState, useCallback, useMemo, useEffect } from 'react';
 import useSWR from 'swr';
-import { getStocks, getBatchPrices } from '@/services/stockCatalogApi';
-import { BatchPriceProvider } from '@/context/BatchPriceContext';
+import { getStocks, extractInitialPricesFromCatalog } from '@/services/stockCatalogApi';
+import { useStockPriceStreamBatch } from '@/hooks/useStockPriceStream';
 import StockCatalogCard from '@/components/stocks/StockCatalogCard';
 import LoadMore from '@/components/stocks/LoadMore';
-import type { StockCatalogItem, StockCatalogResponse } from '@/types/stock';
+import type { StockCatalogWithPrice, StockCatalogWithPriceResponse } from '@/types/stock';
 import type { MappedStockPrice } from '@/lib/api';
-import type { OverseasStockPrice } from '@/types/overseasStock';
 
 interface StockCatalogInfiniteProps {
-  initialData: StockCatalogResponse;
+  initialData: StockCatalogWithPriceResponse;
   initialPrices?: Record<string, MappedStockPrice>;
   marketType?: string;
   sector?: string;
@@ -21,26 +20,13 @@ interface StockCatalogInfiniteProps {
 
 const PAGE_SIZE = 20;
 
-type PriceAction =
-  | { type: 'reset'; prices: Record<string, MappedStockPrice> }
-  | { type: 'merge'; prices: Record<string, MappedStockPrice> };
-
-function priceReducer(state: Record<string, MappedStockPrice>, action: PriceAction): Record<string, MappedStockPrice> {
-  switch (action.type) {
-    case 'reset':
-      return action.prices;
-    case 'merge':
-      return { ...state, ...action.prices };
-  }
-}
-
 const CLIENT_SORT_FIELDS = new Set(['upperLimit', 'lowerLimit']);
 
 function sortItems(
-  items: StockCatalogItem[],
+  items: StockCatalogWithPrice[],
   prices: Record<string, MappedStockPrice>,
   sort: string | undefined,
-): StockCatalogItem[] {
+): StockCatalogWithPrice[] {
   if (!sort) return items;
 
   const [field, dir] = sort.includes(',') ? sort.split(',') : [sort, 'asc'];
@@ -92,10 +78,10 @@ function sortItems(
 }
 
 function filterBySign(
-  items: StockCatalogItem[],
+  items: StockCatalogWithPrice[],
   prices: Record<string, MappedStockPrice>,
   sign: string | undefined,
-): StockCatalogItem[] {
+): StockCatalogWithPrice[] {
   if (!sign) return items;
   return items.filter((item) => prices[item.stockCode]?.sign === sign);
 }
@@ -112,70 +98,53 @@ export default function StockCatalogInfinite({
   const filterKeyStr = `${marketType ?? ''}-${sector ?? ''}-${sign ?? ''}-${sort ?? ''}`;
   const totalPages = initialData.totalPages;
 
-  const [accumulatedPrices, dispatch] = useReducer(priceReducer, initialPrices ?? {});
   const [currentPage, setCurrentPage] = useState(0);
-  const [loadedPages, setLoadedPages] = useState<StockCatalogResponse[]>([initialData]);
+  const [loadedPages, setLoadedPages] = useState<StockCatalogWithPriceResponse[]>([initialData]);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [prevFilterKey, setPrevFilterKey] = useState(filterKeyStr);
+  const [catalogPrices, setCatalogPrices] = useState<Record<string, MappedStockPrice>>(initialPrices ?? {});
 
   if (prevFilterKey !== filterKeyStr) {
     setPrevFilterKey(filterKeyStr);
     setCurrentPage(0);
     setLoadedPages([initialData]);
-    dispatch({ type: 'reset', prices: initialPrices ?? {} });
+    setCatalogPrices(initialPrices ?? {});
   }
 
   const nextPage = currentPage + 1;
   const hasNext = nextPage < totalPages;
 
-  const allItems: StockCatalogItem[] = useMemo(
-    () => loadedPages.flatMap((p) => p.content),
+  const allItems: StockCatalogWithPrice[] = useMemo(
+    () => {
+      const seen = new Set<string>();
+      return loadedPages.flatMap((p) => p.content).filter((item) => {
+        if (seen.has(item.stockCode)) return false;
+        seen.add(item.stockCode);
+        return true;
+      });
+    },
     [loadedPages]
   );
 
-  const stockCodes = useMemo(() => allItems.map((item) => item.stockCode), [allItems]);
-
-  const newCodes = useMemo(() => {
-    return stockCodes.filter((code) => !accumulatedPrices[code]);
-  }, [stockCodes, accumulatedPrices]);
-
-  const deltaKey = useMemo(() => newCodes.slice().sort().join(','), [newCodes]);
-
-  const { data: deltaPrices, isLoading: batchLoading, error: batchError } = useSWR(
-    newCodes.length > 0 ? ['batch-prices-delta', deltaKey] : null,
-    () => getBatchPrices(newCodes),
-    { revalidateOnFocus: false, dedupingInterval: 10000 }
+  const allStockCodes = useMemo(
+    () => allItems.map((item) => item.stockCode),
+    [allItems]
   );
 
-  useEffect(() => {
-    if (deltaPrices) {
-      dispatch({ type: 'merge', prices: deltaPrices });
-    }
-  }, [deltaPrices]);
+  const wsPrices = useStockPriceStreamBatch(allStockCodes, catalogPrices);
 
-  const prefetchKey = hasNext && !isLoadingMore && !batchLoading
+  const mergedPrices = useMemo(
+    () => ({ ...catalogPrices, ...wsPrices }),
+    [catalogPrices, wsPrices]
+  );
+
+  const prefetchKey = hasNext && !isLoadingMore
     ? [`stocks-prefetch`, nextPage, marketType, sector, sign, serverSort]
     : null;
 
-  const { data: prefetchedPage } = useSWR<StockCatalogResponse>(
+  const { data: prefetchedPage } = useSWR<StockCatalogWithPriceResponse>(
     prefetchKey,
     () => getStocks({ page: nextPage, size: PAGE_SIZE, marketType, sector, sort: serverSort }),
-    { revalidateOnFocus: false, dedupingInterval: 60000 }
-  );
-
-  const prefetchedCodes = useMemo(
-    () => (prefetchedPage ? prefetchedPage.content.map((item) => item.stockCode) : []),
-    [prefetchedPage]
-  );
-
-  const prefetchPricesSWRKey = useMemo(() => {
-    if (prefetchedCodes.length === 0) return null;
-    return ['batch-prices-prefetch', prefetchedCodes.slice().sort().join(',')];
-  }, [prefetchedCodes]);
-
-  const { data: prefetchPrices } = useSWR<Record<string, MappedStockPrice>>(
-    prefetchPricesSWRKey,
-    () => getBatchPrices(prefetchedCodes),
     { revalidateOnFocus: false, dedupingInterval: 60000 }
   );
 
@@ -185,8 +154,9 @@ export default function StockCatalogInfinite({
     if (prefetchedPage) {
       setLoadedPages((prev) => [...prev, prefetchedPage]);
       setCurrentPage(nextPage);
-      if (prefetchPrices) {
-        dispatch({ type: 'merge', prices: prefetchPrices });
+      const prefetchedPrices = extractInitialPricesFromCatalog(prefetchedPage);
+      if (Object.keys(prefetchedPrices).length > 0) {
+        setCatalogPrices((prev) => ({ ...prev, ...prefetchedPrices }));
       }
       return;
     }
@@ -196,43 +166,25 @@ export default function StockCatalogInfinite({
       const result = await getStocks({ page: nextPage, size: PAGE_SIZE, marketType, sector, sort: serverSort });
       setLoadedPages((prev) => [...prev, result]);
       setCurrentPage(nextPage);
-      const codes = result.content.map((item) => item.stockCode);
-      if (codes.length > 0) {
-        const prices = await getBatchPrices(codes);
-        dispatch({ type: 'merge', prices });
+      const newPrices = extractInitialPricesFromCatalog(result);
+      if (Object.keys(newPrices).length > 0) {
+        setCatalogPrices((prev) => ({ ...prev, ...newPrices }));
       }
     } finally {
       setIsLoadingMore(false);
     }
-  }, [isLoadingMore, hasNext, prefetchedPage, prefetchPrices, nextPage, marketType, sector, serverSort]);
+  }, [isLoadingMore, hasNext, prefetchedPage, nextPage, marketType, sector, serverSort]);
 
   const filteredItems = useMemo(() => {
-    const filtered = filterBySign(allItems, accumulatedPrices, sign);
-    return sortItems(filtered, accumulatedPrices, sort);
-  }, [allItems, accumulatedPrices, sign, sort]);
-
-  const domesticPrices = accumulatedPrices;
-  const overseasPrices: Record<string, OverseasStockPrice> = {};
-
-  const loadingCodes = useMemo(() => {
-    if (!batchLoading) return new Set<string>();
-    return new Set(newCodes);
-  }, [batchLoading, newCodes]);
-
-  const errorCodes = useMemo(() => {
-    if (!batchError) return new Map<string, string>();
-    const map = new Map<string, string>();
-    for (const code of newCodes) {
-      map.set(code, batchError.message);
-    }
-    return map;
-  }, [batchError, newCodes]);
+    const filtered = filterBySign(allItems, mergedPrices, sign);
+    return sortItems(filtered, mergedPrices, sort);
+  }, [allItems, mergedPrices, sign, sort]);
 
   return (
-    <BatchPriceProvider domestic={domesticPrices} overseas={overseasPrices} loadingCodes={loadingCodes} errorCodes={errorCodes}>
+    <>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
         {filteredItems.map((item) => (
-          <StockCatalogCard key={item.stockCode} item={item} />
+          <StockCatalogCard key={item.stockCode} item={item} price={mergedPrices[item.stockCode]} />
         ))}
       </div>
 
@@ -243,7 +195,7 @@ export default function StockCatalogInfinite({
         </div>
       )}
 
-      <LoadMore onLoadMore={loadMore} hasMore={hasNext} isLoading={isLoadingMore || (newCodes.length > 0 && !batchError)} />
-    </BatchPriceProvider>
+      <LoadMore onLoadMore={loadMore} hasMore={hasNext} isLoading={isLoadingMore} />
+    </>
   );
 }

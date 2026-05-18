@@ -9,7 +9,7 @@ from app.services.recommendation_service import RecommendationService
 from app.services.stock_mapper import StockMapper
 
 redis_client: RedisClient = RedisClient(settings.REDIS_URL)
-nlp_model: NLPModel = NLPModel(settings.MODEL_NAME, settings.MODEL_DEVICE)
+_nlp_model: NLPModel | None = None
 
 
 async def get_db() -> AsyncGenerator:
@@ -25,11 +25,14 @@ def get_redis() -> RedisClient:
 
 
 def get_nlp_model() -> NLPModel:
-    return nlp_model
+    global _nlp_model
+    if _nlp_model is None:
+        _nlp_model = NLPModel(settings.MODEL_NAME, settings.MODEL_DEVICE)
+    return _nlp_model
 
 
 def get_sentiment_service() -> SentimentService:
-    return SentimentService(model=nlp_model)
+    return SentimentService(model=get_nlp_model())
 
 
 def get_stock_mapper() -> StockMapper:

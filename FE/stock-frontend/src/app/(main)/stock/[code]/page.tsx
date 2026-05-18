@@ -33,6 +33,7 @@ import {
 
 import { useAuth } from '@/lib/auth';
 import { useVisibility } from '@/hooks/useVisibility';
+import { useStockPriceStream } from '@/hooks/useStockPriceStream';
 
 type Period = 'D' | 'W' | 'M' | 'Y';
 
@@ -80,7 +81,7 @@ function TradePanel({
   const { data: holdings } = useSWR(
     isAuthenticated ? 'dashboard-holdings' : null,
     () => getHoldings(),
-    { dedupingInterval: 5000 }
+    { dedupingInterval: 30000, revalidateOnFocus: false }
   );
   const userHolding = useMemo(
     () => holdings?.find((h) => h.stockCode === stockCode) ?? null,
@@ -94,9 +95,9 @@ function TradePanel({
     try {
       let result: OrderResult;
       if (side === 'buy') {
-        result = await buyOrder(stockCode, quantity);
+        result = await buyOrder(stockCode, quantity, priceInfo?.price ?? 0);
       } else {
-        result = await sellOrder(stockCode, quantity);
+        result = await sellOrder(stockCode, quantity, priceInfo?.price ?? 0);
       }
       setOrderMsg({
         type: 'success',
@@ -237,10 +238,12 @@ export default function StockDetailPage() {
   const { data: swrPrice } = useSWR<MappedStockPrice | null>(
     stockCode ? `detail-price-${stockCode}` : null,
     () => getStockPrice(stockCode),
-    { refreshInterval: isVisible ? 10000 : 0, dedupingInterval: 5000 }
+    { dedupingInterval: 30000, revalidateOnFocus: false }
   );
 
-  const priceInfo = swrPrice ?? null;
+  const { price: wsPrice } = useStockPriceStream(stockCode, swrPrice ?? null);
+
+  const priceInfo = wsPrice ?? swrPrice ?? null;
   const stockName = priceInfo?.stockName || stockCode;
 
   const [period, setPeriod] = useState<Period>('D');

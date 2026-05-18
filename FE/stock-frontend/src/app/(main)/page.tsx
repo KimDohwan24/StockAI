@@ -23,13 +23,14 @@ import {
   PortfolioResponse,
   HoldingResponse,
 } from '@/lib/api';
-import { getBatchPrices } from '@/services/stockCatalogApi';
 import { useAuth } from '@/lib/auth';
 import { useVisibility } from '@/hooks/useVisibility';
+import { useStockPriceStreamBatch } from '@/hooks/useStockPriceStream';
 import OverseasBalanceTable from '@/components/overseas/OverseasBalanceTable';
-import { getTrendingOverseasStocks } from '@/services/overseasStockApi';
+import { getTrendingOverseasStocks, type OverseasTrendingResponse } from '@/services/overseasStockApi';
 import OverseasStockCard from '@/components/overseas/OverseasStockCard';
 import type { OverseasStockCatalogItem } from '@/types/overseasStock';
+import { getBatchStockPrices } from '@/services/stockCatalogApi';
 
 const HERO_CODE = '005930';
 const RECOMMENDED_CODES = ['005930', '000660', '035420', '035720'];
@@ -39,7 +40,6 @@ const STOCK_NAMES: Record<string, string> = {
   '035420': 'NAVER',
   '035720': '카카오',
 };
-const POLLING_INTERVAL = 15000;
 
 interface StockSnapshot {
   code: string;
@@ -118,9 +118,14 @@ function HeroSection({ data, isLoggedIn }: { data: StockSnapshot; isLoggedIn: bo
                 데이터 로딩 중...
               </div>
             )}
-            {error && (
+            {!loading && error && (
               <div className="flex items-center justify-center h-full text-market-down text-sm">
                 {error}
+              </div>
+            )}
+            {!loading && !error && !info && (
+              <div className="flex items-center justify-center h-full text-steel text-sm">
+                가격 데이터를 불러올 수 없습니다.
               </div>
             )}
             {!loading && !error && info && (
@@ -304,53 +309,45 @@ function HoldingsList({ holdings }: { holdings: HoldingResponse[] }) {
 }
 
 function useDashboardStocks(
+  allCodes: string[],
   heroCode: string,
   recommendedCodes: string[],
   isVisible: boolean,
+  initialPrices: Record<string, MappedStockPrice>,
+  pricesLoading: boolean,
 ): { hero: HeroSnapshot; recommended: RecommendedSnapshot[] } {
-  const allCodes = useMemo(
-    () => [...new Set([heroCode, ...recommendedCodes])],
-    [heroCode, recommendedCodes],
-  );
-  const batchKey = allCodes.sort().join(',');
-
-  const { data: batchPrices, error: batchError } = useSWR(
-    isVisible ? `dashboard-batch-${batchKey}` : null,
-    () => getBatchPrices(allCodes),
-    { refreshInterval: POLLING_INTERVAL, dedupingInterval: 15000, keepPreviousData: true },
-  );
-
   const { data: minutes, error: minutesError } = useSWR(
     isVisible ? `hero-minutes-${heroCode}` : null,
     () => getMinuteCandles(heroCode),
-    { refreshInterval: POLLING_INTERVAL, dedupingInterval: 15000 },
+    { dedupingInterval: 15000 },
   );
 
+  const wsPrices = useStockPriceStreamBatch(allCodes, initialPrices);
+
   const sparkline = useMemo(() => minutes ? toSparkline(minutes) : [], [minutes]);
-  const heroPrice = batchPrices?.[heroCode] ?? null;
-  const heroLoading = !batchPrices && !batchError;
+  const heroPrice = wsPrices[heroCode] ?? initialPrices[heroCode] ?? null;
   const hero: HeroSnapshot = useMemo(() => ({
     code: heroCode,
     name: heroPrice?.stockName || STOCK_NAMES[heroCode] || heroCode,
     info: heroPrice,
     sparkline,
-    loading: heroLoading,
-    error: batchError?.message ?? (minutesError?.message ?? null),
-  }), [heroCode, heroPrice, sparkline, heroLoading, batchError, minutesError]);
+    loading: pricesLoading && !heroPrice,
+    error: null,
+  }), [heroCode, heroPrice, sparkline, minutesError, pricesLoading]);
 
   const recommended: RecommendedSnapshot[] = useMemo(() =>
     recommendedCodes.map((code) => {
-      const price = batchPrices?.[code] ?? null;
+      const price = wsPrices[code] ?? initialPrices[code] ?? null;
       return {
         code,
         name: price?.stockName || STOCK_NAMES[code] || code,
         info: price,
         sparkline: [],
-        loading: !batchPrices && !batchError,
-        error: batchError?.message ?? null,
+        loading: pricesLoading && !price,
+        error: null,
       };
     }),
-    [recommendedCodes, batchPrices, batchError],
+    [recommendedCodes, wsPrices, initialPrices, pricesLoading],
   );
 
   return { hero, recommended };
@@ -358,13 +355,20 @@ function useDashboardStocks(
 
 function OverseasRecommendedSection() {
   const isVisible = useVisibility();
-  const { data: trendingItems, error } = useSWR<OverseasStockCatalogItem[]>(
+  const { data: trendingItems, error } = useSWR<OverseasTrendingResponse[]>(
     isVisible ? 'overseas-trending' : null,
     () => getTrendingOverseasStocks(),
     { dedupingInterval: 30000 }
   );
 
-  const items = trendingItems ?? [];
+  const items: OverseasStockCatalogItem[] = (trendingItems ?? []).map((t) => ({
+    ticker: t.stockCode,
+    name: t.name,
+    exchangeCode: t.marketType as OverseasStockCatalogItem['exchangeCode'],
+    country: 'US' as const,
+    sector: null,
+    currency: 'USD',
+  }));
 
   if (error) {
     return (
@@ -410,17 +414,33 @@ export default function Dashboard() {
   const [dashboardTab, setDashboardTab] = useState<'domestic' | 'overseas'>('domestic');
   const isVisible = useVisibility();
 
-  const { hero, recommended } = useDashboardStocks(HERO_CODE, RECOMMENDED_CODES, isVisible);
+  const allDashboardCodes = useMemo(
+    () => [...new Set([HERO_CODE, ...RECOMMENDED_CODES])],
+    [],
+  );
+
+  const { data: batchPrices, isLoading: pricesLoading } = useSWR(
+    isVisible ? 'dashboard-batch-prices' : null,
+    () => getBatchStockPrices(allDashboardCodes),
+    { revalidateOnFocus: false, dedupingInterval: 30000 },
+  );
+
+  const initialPrices = useMemo(
+    () => batchPrices ?? {},
+    [batchPrices],
+  );
+
+  const { hero, recommended } = useDashboardStocks(allDashboardCodes, HERO_CODE, RECOMMENDED_CODES, isVisible, initialPrices, pricesLoading);
 
   const { data: portfolio } = useSWR(
     isAuthenticated ? 'dashboard-portfolio' : null,
     () => getPortfolio(),
-    { refreshInterval: 30000, dedupingInterval: 15000 }
+    { revalidateOnFocus: false, dedupingInterval: 30000 }
   );
   const { data: holdings } = useSWR(
     isAuthenticated ? 'dashboard-holdings' : null,
     () => getHoldings(),
-    { refreshInterval: 30000, dedupingInterval: 15000 }
+    { revalidateOnFocus: false, dedupingInterval: 30000 }
   );
 
   return (

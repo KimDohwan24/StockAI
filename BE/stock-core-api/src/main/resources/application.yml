@@ -29,6 +29,7 @@ server:
 app:
   ai-server:
     url: ${APP_AI_SERVER_URL}
+    timeout: ${APP_AI_SERVER_TIMEOUT:5000}
   jwt:
     secret: ${APP_JWT_SECRET}
     expiration: ${APP_JWT_EXPIRATION}
@@ -42,3 +43,4 @@ kis:
   account:
     cano: ${KIS_ACCOUNT_CANO}
     acnt_prdt_cd: ${KIS_ACCOUNT_ACNT_PRDT_CD}
+  websocket-url: ${KIS_WEBSOCKET_URL}

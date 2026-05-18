@@ -12,20 +12,21 @@ export interface StockCatalogWithPrice extends StockCatalogItem {
   changeRate: string | null;
   volume: string | null;
   marketCap: string | null;
+  priceUpdatedAt: string | null;
 }
 
 export interface StockCatalogWithPriceResponse {
   content: StockCatalogWithPrice[];
-  page: number;
-  size: number;
+  pageNumber: number;
+  pageSize: number;
   totalElements: number;
   totalPages: number;
 }
 
 export interface StockCatalogResponse {
   content: StockCatalogItem[];
-  page: number;
-  size: number;
+  pageNumber: number;
+  pageSize: number;
   totalElements: number;
   totalPages: number;
 }

@@ -3,11 +3,12 @@ package com.stock.infrastructure.client;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.google.common.util.concurrent.RateLimiter;
 import com.stock.config.KisConfig;
 import com.stock.infrastructure.dto.kis.*;
 import com.stock.service.KisAuthService;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
@@ -20,21 +21,24 @@ import java.util.List;
 
 @Slf4j
 @Component
-@RequiredArgsConstructor
 public class KisApiClient {
 
     private final KisConfig kisConfig;
     private final KisAuthService kisAuthService;
     private final ObjectMapper objectMapper;
+    private final WebClient kisWebClient;
+    private final RateLimiter rateLimiter = RateLimiter.create(3.0);
+    private static final int MAX_RETRY = 3;
+    private static final long BASE_RETRY_DELAY_MS = 1100;
 
-    private WebClient getWebClient() {
-        return WebClient.builder()
-                .baseUrl(kisConfig.getBaseUrl())
-                .defaultHeader("Content-Type", "application/json; charset=utf-8")
-                .defaultHeader("appkey", kisConfig.getAppkey())
-                .defaultHeader("appsecret", kisConfig.getAppsecret())
-                .defaultHeader("custtype", "P")
-                .build();
+    public KisApiClient(KisConfig kisConfig,
+                        KisAuthService kisAuthService,
+                        ObjectMapper objectMapper,
+                        @Qualifier("kisWebClient") WebClient kisWebClient) {
+        this.kisConfig = kisConfig;
+        this.kisAuthService = kisAuthService;
+        this.objectMapper = objectMapper;
+        this.kisWebClient = kisWebClient;
     }
 
     private String getAuthHeader() {
@@ -51,34 +55,52 @@ public class KisApiClient {
      * 주식현재가 시세 (모의: VTTC0812Q, 실전: FHKST01010100)
      */
     public StockPriceResponse getStockPrice(String stockCode) {
-        String trId = "FHKST01010100"; // 실전투자용
+        rateLimiter.acquire();
+        String trId = "FHKST01010100";
         String uri = UriComponentsBuilder.fromUriString("/uapi/domestic-stock/v1/quotations/inquire-price")
                 .queryParam("fid_cond_mrkt_div_code", "J")
                 .queryParam("fid_input_iscd", stockCode)
                 .toUriString();
 
-        KisApiResponse<StockPriceResponse> response = getWebClient()
-                .get()
-                .uri(uri)
-                .header("authorization", getAuthHeader())
-                .header("tr_id", trId)
-                .retrieve()
-                .onStatus(status -> status.isError(),
-                        clientResponse -> clientResponse.bodyToMono(String.class)
-                                .flatMap(body -> {
-                                    logError(trId, body);
-                                    return Mono.error(new RuntimeException("KIS API error: " + body));
-                                }))
-                .bodyToMono(new ParameterizedTypeReference<KisApiResponse<StockPriceResponse>>() {})
-                .block();
+        Exception lastException = null;
+        for (int retry = 0; retry <= MAX_RETRY; retry++) {
+            try {
+                KisApiResponse<StockPriceResponse> response = kisWebClient
+                        .get()
+                        .uri(uri)
+                        .header("authorization", getAuthHeader())
+                        .header("tr_id", trId)
+                        .retrieve()
+                        .onStatus(status -> status.isError(),
+                                clientResponse -> clientResponse.bodyToMono(String.class)
+                                        .flatMap(body -> {
+                                            logError(trId, body);
+                                            return Mono.error(new RuntimeException("KIS API error: " + body));
+                                        }))
+                        .bodyToMono(new ParameterizedTypeReference<KisApiResponse<StockPriceResponse>>() {})
+                        .block();
 
-        return validateAndReturn(response, trId);
+                return validateAndReturn(response, trId);
+            } catch (Exception e) {
+                lastException = e;
+                if (retry < MAX_RETRY && isRateLimitError(e)) {
+                    long delay = BASE_RETRY_DELAY_MS * (1L << retry);
+                    log.warn("Rate limited for stock {}, retrying in {}ms... ({}/{})", stockCode, delay, retry + 1, MAX_RETRY);
+                    try { Thread.sleep(delay); } catch (InterruptedException ie) { Thread.currentThread().interrupt(); throw new RuntimeException("Interrupted during rate limit retry", ie); }
+                    rateLimiter.acquire();
+                } else if (!isRateLimitError(e)) {
+                    throw e;
+                }
+            }
+        }
+        throw new RuntimeException("KIS API rate limit exceeded after " + MAX_RETRY + " retries for stock " + stockCode, lastException);
     }
 
     /**
      * 국내주식기간별시세(일/주/월/년) (FHKST03010100)
      */
     public List<DailyPriceItem> getDailyPrices(String stockCode, String periodDivCode, String startDate, String endDate) {
+        rateLimiter.acquire();
         String trId = "FHKST03010100";
         String uri = UriComponentsBuilder.fromUriString("/uapi/domestic-stock/v1/quotations/inquire-daily-price")
                 .queryParam("fid_cond_mrkt_div_code", "J")
@@ -89,7 +111,7 @@ public class KisApiClient {
                 .queryParam("fid_org_adj_prc", "0") // 0:수정주가, 1:원주가
                 .toUriString();
 
-        JsonNode root = getWebClient()
+        JsonNode root = kisWebClient
                 .get()
                 .uri(uri)
                 .header("authorization", getAuthHeader())
@@ -111,6 +133,7 @@ public class KisApiClient {
      * 주식당일분봉조회 (FHKST03010200)
      */
     public List<MinutePriceItem> getMinutePrices(String stockCode) {
+        rateLimiter.acquire();
         String trId = "FHKST03010200";
         String uri = UriComponentsBuilder.fromUriString("/uapi/domestic-stock/v1/quotations/inquire-time-itemchartprice")
                 .queryParam("fid_cond_mrkt_div_code", "J")
@@ -120,7 +143,7 @@ public class KisApiClient {
                 .queryParam("fid_pw_data_incu_yn", "N")
                 .toUriString();
 
-        JsonNode root = getWebClient()
+        JsonNode root = kisWebClient
                 .get()
                 .uri(uri)
                 .header("authorization", getAuthHeader())
@@ -157,7 +180,8 @@ public class KisApiClient {
     }
 
     private OrderResponse placeOrder(String trId, OrderRequest request) {
-        KisApiResponse<OrderResponse> response = getWebClient()
+        rateLimiter.acquire();
+        KisApiResponse<OrderResponse> response = kisWebClient
                 .post()
                 .uri("/uapi/domestic-stock/v1/trading/order-cash")
                 .header("authorization", getAuthHeader())
@@ -181,8 +205,9 @@ public class KisApiClient {
      * 주식주문정정취소 (실전: TTTC0803U, 모의: VTTC0803U)
      */
     public OrderResponse amendCancelOrder(OrderRequest request) {
+        rateLimiter.acquire();
         String trId = "VTTC0803U"; // 모의투자 정정취소
-        KisApiResponse<OrderResponse> response = getWebClient()
+        KisApiResponse<OrderResponse> response = kisWebClient
                 .post()
                 .uri("/uapi/domestic-stock/v1/trading/order-rvsecncl")
                 .header("authorization", getAuthHeader())
@@ -208,6 +233,7 @@ public class KisApiClient {
      * 주식잔고조회 (실전: TTTC8434R, 모의: VTTC8434R)
      */
     public BalanceResponse getBalance() {
+        rateLimiter.acquire();
         String trId = "VTTC8434R"; // 모의투자
         String uri = UriComponentsBuilder.fromUriString("/uapi/domestic-stock/v1/trading/inquire-balance")
                 .queryParam("CANO", kisConfig.getAccountNo())
@@ -223,7 +249,7 @@ public class KisApiClient {
                 .queryParam("CTX_AREA_NK100", "")
                 .toUriString();
 
-        BalanceResponse response = getWebClient()
+        BalanceResponse response = kisWebClient
                 .get()
                 .uri(uri)
                 .header("authorization", getAuthHeader())
@@ -251,7 +277,8 @@ public class KisApiClient {
      * 주식잔고조회_실현손익 (TTTC8494R)
      */
     public KisApiResponse<List<RealizedProfitItem>> getRealizedProfit() {
-        String trId = "TTTC8494R";
+        rateLimiter.acquire();
+        String trId = "VTTC8494R";
         String uri = UriComponentsBuilder.fromUriString("/uapi/domestic-stock/v1/trading/inquire-realized-profit")
                 .queryParam("CANO", kisConfig.getAccountNo())
                 .queryParam("ACNT_PRDT_CD", kisConfig.getAccountProductCode())
@@ -260,7 +287,7 @@ public class KisApiClient {
                 .queryParam("CTX_AREA_NK100", "")
                 .toUriString();
 
-        KisApiResponse<List<RealizedProfitItem>> response = getWebClient()
+        KisApiResponse<List<RealizedProfitItem>> response = kisWebClient
                 .get()
                 .uri(uri)
                 .header("authorization", getAuthHeader())
@@ -282,6 +309,7 @@ public class KisApiClient {
      * 매수가능조회 (실전: TTTC8908R, 모의: VTTC8908R)
      */
     public BuyingPowerResponse getBuyingPower(String stockCode) {
+        rateLimiter.acquire();
         String trId = "VTTC8908R"; // 모의투자
         String uri = UriComponentsBuilder.fromUriString("/uapi/domestic-stock/v1/trading/inquire-psbl-order")
                 .queryParam("CANO", kisConfig.getAccountNo())
@@ -293,7 +321,7 @@ public class KisApiClient {
                 .queryParam("OVRS_ICLD_YN", "N")
                 .toUriString();
 
-        KisApiResponse<BuyingPowerResponse> response = getWebClient()
+        KisApiResponse<BuyingPowerResponse> response = kisWebClient
                 .get()
                 .uri(uri)
                 .header("authorization", getAuthHeader())
@@ -313,6 +341,229 @@ public class KisApiClient {
 
     // ================== 유틸리티 ==================
 
+    /**
+     * 해외주식 현재체결가 (HHDFS00000300)
+     */
+    public OverseasStockPriceResponse getOverseasPrice(String ticker, String exchangeCode) {
+        rateLimiter.acquire();
+        String trId = "HHDFS00000300";
+        String uri = UriComponentsBuilder.fromUriString("/uapi/overseas-stock/v1/quotations/price")
+                .queryParam("AUTH", "")
+                .queryParam("EXCD", exchangeCode)
+                .queryParam("SYMB", ticker)
+                .toUriString();
+
+        Exception lastException = null;
+        for (int retry = 0; retry <= MAX_RETRY; retry++) {
+            try {
+                KisApiResponse<OverseasStockPriceResponse> response = kisWebClient
+                        .get()
+                        .uri(uri)
+                        .header("authorization", getAuthHeader())
+                        .header("tr_id", trId)
+                        .retrieve()
+                        .onStatus(status -> status.isError(),
+                                clientResponse -> clientResponse.bodyToMono(String.class)
+                                        .flatMap(body -> {
+                                            logError(trId, body);
+                                            return Mono.error(new RuntimeException("KIS overseas price API error: " + body));
+                                        }))
+                        .bodyToMono(new ParameterizedTypeReference<KisApiResponse<OverseasStockPriceResponse>>() {})
+                        .block();
+
+                return validateAndReturn(response, trId);
+            } catch (Exception e) {
+                lastException = e;
+                if (retry < MAX_RETRY && isRateLimitError(e)) {
+                    long delay = BASE_RETRY_DELAY_MS * (1L << retry);
+                    log.warn("Rate limited for overseas stock {}/{}, retrying in {}ms... ({}/{})", ticker, exchangeCode, delay, retry + 1, MAX_RETRY);
+                    try { Thread.sleep(delay); } catch (InterruptedException ie) { Thread.currentThread().interrupt(); throw new RuntimeException("Interrupted during rate limit retry", ie); }
+                    rateLimiter.acquire();
+                } else if (!isRateLimitError(e)) {
+                    throw e;
+                }
+            }
+        }
+        throw new RuntimeException("KIS API rate limit exceeded after " + MAX_RETRY + " retries for overseas stock " + ticker + "/" + exchangeCode, lastException);
+    }
+
+    /**
+     * 해외주식 기간별시세 (HHDFS00000400)
+     */
+    public List<OverseasDailyPriceItem> getOverseasDailyPrices(String ticker, String exchangeCode,
+                                                                String periodDivCode, String startDate, String endDate) {
+        rateLimiter.acquire();
+        String trId = "HHDFS00000400";
+        String uri = UriComponentsBuilder.fromUriString("/uapi/overseas-stock/v1/quotations/daily-price")
+                .queryParam("EXCD", exchangeCode)
+                .queryParam("SYMB", ticker)
+                .queryParam("GUBN", periodDivCode)
+                .queryParam("BYMD", endDate)
+                .queryParam("MODP", "1")
+                .toUriString();
+
+        JsonNode root = kisWebClient
+                .get()
+                .uri(uri)
+                .header("authorization", getAuthHeader())
+                .header("tr_id", trId)
+                .retrieve()
+                .onStatus(status -> status.isError(),
+                        clientResponse -> clientResponse.bodyToMono(String.class)
+                                .flatMap(body -> {
+                                    logError(trId, body);
+                                    return Mono.error(new RuntimeException("KIS overseas daily price API error: " + body));
+                                }))
+                .bodyToMono(JsonNode.class)
+                .block();
+
+        return parseOutput2List(root, trId, new TypeReference<List<OverseasDailyPriceItem>>() {});
+    }
+
+    /**
+     * 국내 종목마스터 조회 (CTPF1604R)
+     */
+    public List<KisStockMasterItem> getStockMasterList(String marketDivCode) {
+        rateLimiter.acquire();
+        String trId = "CTPF1604R";
+        List<KisStockMasterItem> allItems = new java.util.ArrayList<>();
+        String ctxAreaFk = "";
+        String ctxAreaNk = "";
+        int page_count = 0;
+        boolean isFirstPage = true;
+
+        while (true) {
+            String currentFk = ctxAreaFk;
+            String currentNk = ctxAreaNk;
+            String uri = UriComponentsBuilder.fromUriString("/uapi/domestic-stock/v1/quotations/inquire-item-code")
+                    .queryParam("PDNO", "")
+                    .queryParam("PRDT_TYPE_CD", marketDivCode)
+                    .queryParam("PAR_PR", "")
+                    .queryParam("CRAHN_YN", "")
+                    .queryParam("CTX_AREA_FK100", currentFk)
+                    .queryParam("CTX_AREA_NK100", currentNk)
+                    .toUriString();
+
+            String trCont = isFirstPage ? "N" : "Y";
+            JsonNode root = null;
+            for (int retry = 0; retry < 5; retry++) {
+                try {
+                    root = kisWebClient
+                            .get()
+                            .uri(uri)
+                            .header("authorization", getAuthHeader())
+                            .header("tr_id", trId)
+                            .header("tr_cont", trCont)
+                            .retrieve()
+                            .onStatus(status -> status.isError(),
+                                    clientResponse -> clientResponse.bodyToMono(String.class)
+                                            .flatMap(body -> {
+                                                logError(trId, body);
+                                                return Mono.error(new RuntimeException("KIS stock master API error: " + body));
+                                            }))
+                            .bodyToMono(JsonNode.class)
+                            .block();
+                    break;
+                } catch (Exception e) {
+                    if (retry < 4 && (e.getMessage() != null && e.getMessage().contains("EGW00201"))) {
+                        log.warn("Rate limited on page {} for market {}, retrying in 3s... ({}/4)", page_count + 1, marketDivCode, retry + 1);
+                        try { Thread.sleep(3000); } catch (InterruptedException ie) { Thread.currentThread().interrupt(); throw new RuntimeException("Interrupted during rate limit retry", ie); }
+                    } else {
+                        throw e;
+                    }
+                }
+            }
+
+            List<KisStockMasterItem> page = parseOutput2List(root, trId, new TypeReference<List<KisStockMasterItem>>() {});
+            allItems.addAll(page);
+            page_count++;
+            isFirstPage = false;
+
+            ctxAreaFk = root.path("ctx_area_fk100").asText("");
+            ctxAreaNk = root.path("ctx_area_nk100").asText("");
+
+            if (ctxAreaFk.isBlank() || ctxAreaNk.isBlank() || page.isEmpty()) {
+                break;
+            }
+            log.info("Stock master pagination: fetched {} items so far (page {}), continuing...", allItems.size(), page_count);
+            try { Thread.sleep(1100); } catch (InterruptedException e) { Thread.currentThread().interrupt(); break; }
+        }
+
+        log.info("Stock master list complete: {} items for market {}", allItems.size(), marketDivCode);
+        return allItems;
+    }
+
+    /**
+     * 해외 종목마스터 조회 (CTPF1702R)
+     */
+    public List<KisOverseasStockMasterItem> getOverseasStockMasterList(String exchangeCode) {
+        rateLimiter.acquire();
+        String trId = "CTPF1702R";
+        List<KisOverseasStockMasterItem> allItems = new java.util.ArrayList<>();
+        String ctxAreaFk = "";
+        String ctxAreaNk = "";
+        int page_count = 0;
+        boolean isFirstPage = true;
+
+        while (true) {
+            String currentFk = ctxAreaFk;
+            String currentNk = ctxAreaNk;
+            String uri = UriComponentsBuilder.fromUriString("/uapi/overseas-stock/v1/quotations/inquire-item-code")
+                    .queryParam("PDNO", "")
+                    .queryParam("PRDT_TYPE_CD", exchangeCode)
+                    .queryParam("CTX_AREA_FK100", currentFk)
+                    .queryParam("CTX_AREA_NK100", currentNk)
+                    .toUriString();
+
+            String trCont = isFirstPage ? "N" : "Y";
+            JsonNode root = null;
+            for (int retry = 0; retry < 5; retry++) {
+                try {
+                    root = kisWebClient
+                            .get()
+                            .uri(uri)
+                            .header("authorization", getAuthHeader())
+                            .header("tr_id", trId)
+                            .header("tr_cont", trCont)
+                            .retrieve()
+                            .onStatus(status -> status.isError(),
+                                    clientResponse -> clientResponse.bodyToMono(String.class)
+                                            .flatMap(body -> {
+                                                logError(trId, body);
+                                                return Mono.error(new RuntimeException("KIS overseas stock master API error: " + body));
+                                            }))
+                            .bodyToMono(JsonNode.class)
+                            .block();
+                    break;
+                } catch (Exception e) {
+                    if (retry < 4 && (e.getMessage() != null && e.getMessage().contains("EGW00201"))) {
+                        log.warn("Rate limited on page {} for exchange {}, retrying in 3s... ({}/4)", page_count + 1, exchangeCode, retry + 1);
+                        try { Thread.sleep(3000); } catch (InterruptedException ie) { Thread.currentThread().interrupt(); throw new RuntimeException("Interrupted during rate limit retry", ie); }
+                    } else {
+                        throw e;
+                    }
+                }
+            }
+
+            List<KisOverseasStockMasterItem> page = parseOutput2List(root, trId, new TypeReference<List<KisOverseasStockMasterItem>>() {});
+            allItems.addAll(page);
+            page_count++;
+            isFirstPage = false;
+
+            ctxAreaFk = root.path("ctx_area_fk100").asText("");
+            ctxAreaNk = root.path("ctx_area_nk100").asText("");
+
+            if (ctxAreaFk.isBlank() || ctxAreaNk.isBlank() || page.isEmpty()) {
+                break;
+            }
+            log.info("Overseas stock master pagination: fetched {} items so far for exchange {} (page {}), continuing...", allItems.size(), exchangeCode, page_count);
+            try { Thread.sleep(1100); } catch (InterruptedException e) { Thread.currentThread().interrupt(); break; }
+        }
+
+        log.info("Overseas stock master list complete: {} items for exchange {}", allItems.size(), exchangeCode);
+        return allItems;
+    }
+
     private <T> T validateAndReturn(KisApiResponse<T> response, String trId) {
         if (response == null) {
             throw new RuntimeException("KIS API returned null [tr_id=" + trId + "]");
@@ -321,6 +572,11 @@ public class KisApiClient {
             throw new RuntimeException("KIS API error [tr_id=" + trId + ", rt_cd=" + response.getRt_cd() + ", msg=" + response.getMsg1() + "]");
         }
         return response.getOutput() != null ? response.getOutput() : response.getOutput1();
+    }
+
+    private boolean isRateLimitError(Exception e) {
+        String msg = e.getMessage();
+        return msg != null && (msg.contains("EGW00201") || msg.contains("rate limit") || msg.contains("거래건수"));
     }
 
     private <T> KisApiResponse<T> validateResponse(KisApiResponse<T> response, String trId) {

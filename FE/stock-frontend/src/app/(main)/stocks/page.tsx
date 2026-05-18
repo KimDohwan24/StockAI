@@ -7,13 +7,12 @@ import SectorFilter from '@/components/stocks/SectorFilter';
 import SortSelect from '@/components/stocks/SortSelect';
 import StockCatalogInfinite from '@/components/stocks/StockCatalogInfinite';
 import { getStocks, extractInitialPricesFromCatalog } from '@/services/stockCatalogApi';
-import type { StockCatalogWithPriceResponse } from '@/types/stock';
 
 export const metadata: Metadata = {
   title: '전체 종목 | StockAI',
 };
 
-export const revalidate = 30;
+export const revalidate = 60;
 
 async function StockCatalogContent({
   searchParams,
@@ -27,20 +26,13 @@ async function StockCatalogContent({
   const sort = typeof params.sort === 'string' ? params.sort : undefined;
 
   let initialData;
-  let initialPrices: Record<string, import('@/lib/api').MappedStockPrice> = {};
   try {
-    const enriched: StockCatalogWithPriceResponse = await getStocks({ page: 0, size: 20, marketType, sector, sign, sort }) as unknown as StockCatalogWithPriceResponse;
-    initialData = {
-      content: enriched.content.map(({ currentPrice, change, changeSign, changeRate, volume, marketCap, ...rest }) => rest),
-      page: enriched.page,
-      size: enriched.size,
-      totalElements: enriched.totalElements,
-      totalPages: enriched.totalPages,
-    };
-    initialPrices = extractInitialPricesFromCatalog(enriched);
+    initialData = await getStocks({ page: 0, size: 20, marketType, sector, sign, sort });
   } catch {
-    initialData = { content: [], page: 0, size: 20, totalElements: 0, totalPages: 0 };
+    initialData = { content: [], pageNumber: 0, pageSize: 20, totalElements: 0, totalPages: 0 };
   }
+
+  const initialPrices = extractInitialPricesFromCatalog(initialData);
 
   return (
     <StockCatalogInfinite

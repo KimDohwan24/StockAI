@@ -1,7 +1,19 @@
-import { fetcher, API_BASE_URL, parseSign } from '@/lib/fetcher';
-import { mapStockPrice } from '@/lib/api';
+import { fetcher, API_BASE_URL, parseSign, num } from '@/lib/fetcher';
 import type { MappedStockPrice, StockPriceResponse } from '@/lib/api';
-import type { StockCatalogResponse, StockCatalogWithPriceResponse, StockCatalogItem } from '@/types/stock';
+import { mapStockPrice } from '@/lib/api';
+import type { StockCatalogWithPriceResponse, StockCatalogItem } from '@/types/stock';
+
+export interface TrendingResponse {
+  stockCode: string;
+  name: string;
+  marketType: string;
+  currentPrice: string;
+  changeValue: string;
+  changeSign: string;
+  changeRate: string;
+  volume: string;
+  marketCap: string | null;
+}
 
 export function extractInitialPricesFromCatalog(
   data: StockCatalogWithPriceResponse
@@ -46,7 +58,7 @@ export async function getStocks(params: {
   sector?: string;
   sign?: string;
   sort?: string;
-}): Promise<StockCatalogResponse> {
+}): Promise<StockCatalogWithPriceResponse> {
   const sp = new URLSearchParams();
   if (params.page !== undefined) sp.set('page', String(params.page));
   if (params.size !== undefined) sp.set('size', String(params.size));
@@ -55,23 +67,40 @@ export async function getStocks(params: {
   if (params.sign) sp.set('sign', params.sign);
   if (params.sort) sp.set('sort', params.sort);
   const qs = sp.toString();
-  return fetcher<StockCatalogResponse>(`${API_BASE_URL}/api/stocks${qs ? `?${qs}` : ''}`);
+  return fetcher<StockCatalogWithPriceResponse>(`${API_BASE_URL}/api/stocks${qs ? `?${qs}` : ''}`);
 }
 
 export async function searchStocks(params: {
   query: string;
   page?: number;
   size?: number;
-}): Promise<StockCatalogResponse> {
+}): Promise<StockCatalogWithPriceResponse> {
   const sp = new URLSearchParams();
   sp.set('query', params.query);
   if (params.page !== undefined) sp.set('page', String(params.page));
   if (params.size !== undefined) sp.set('size', String(params.size));
-  return fetcher<StockCatalogResponse>(`${API_BASE_URL}/api/stocks/search?${sp.toString()}`);
+  return fetcher<StockCatalogWithPriceResponse>(`${API_BASE_URL}/api/stocks/search?${sp.toString()}`);
 }
 
-export async function getTrendingStocks(): Promise<StockCatalogItem[]> {
-  return fetcher<StockCatalogItem[]>(`${API_BASE_URL}/api/stocks/trending`);
+export async function getTrendingStocks(): Promise<TrendingResponse[]> {
+  return fetcher<TrendingResponse[]>(`${API_BASE_URL}/api/trending/domestic`);
+}
+
+export async function getBatchStockPrices(stockCodes: string[]): Promise<Record<string, MappedStockPrice>> {
+  const results = await Promise.allSettled(
+    stockCodes.map(async (code) => {
+      const raw = await fetcher<StockPriceResponse>(`${API_BASE_URL}/api/stocks/${code}/price`);
+      const mapped = mapStockPrice(raw);
+      return [code, mapped] as const;
+    }),
+  );
+  const prices: Record<string, MappedStockPrice> = {};
+  for (const r of results) {
+    if (r.status === 'fulfilled' && r.value[1]) {
+      prices[r.value[0]] = r.value[1];
+    }
+  }
+  return prices;
 }
 
 export async function getSectors(marketType?: string): Promise<string[]> {
@@ -81,32 +110,3 @@ export async function getSectors(marketType?: string): Promise<string[]> {
   return fetcher<string[]>(`${API_BASE_URL}/api/stocks/sectors${qs ? `?${qs}` : ''}`);
 }
 
-const BATCH_CHUNK_SIZE = 50;
-
-function chunkArray<T>(array: T[], size: number): T[][] {
-  const chunks: T[][] = [];
-  for (let i = 0; i < array.length; i += size) {
-    chunks.push(array.slice(i, i + size));
-  }
-  return chunks;
-}
-
-export async function getBatchPrices(stockCodes: string[]): Promise<Record<string, MappedStockPrice>> {
-  const chunks = chunkArray(stockCodes, BATCH_CHUNK_SIZE);
-  const results = await Promise.all(
-    chunks.map((chunk) =>
-      fetcher<Record<string, StockPriceResponse>>(`${API_BASE_URL}/api/stocks/prices`, {
-        method: 'POST',
-        body: JSON.stringify({ stockCodes: chunk }),
-      })
-    )
-  );
-  const result: Record<string, MappedStockPrice> = {};
-  for (const raw of results) {
-    for (const [code, priceRaw] of Object.entries(raw)) {
-      const mapped = mapStockPrice(priceRaw);
-      if (mapped) result[code] = mapped;
-    }
-  }
-  return result;
-}

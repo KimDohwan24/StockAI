@@ -1,7 +1,6 @@
-import { fetcher, API_BASE_URL, parseSign } from '@/lib/fetcher';
+import { fetcher, API_BASE_URL } from '@/lib/fetcher';
 import type {
   OverseasStockCatalogItem,
-  OverseasStockCatalogResponse,
   OverseasStockCatalogWithPriceResponse,
   OverseasStockPrice,
   OverseasOrderRequest,
@@ -39,7 +38,7 @@ export async function getOverseasStocks(params: {
   country?: string;
   sector?: string;
   sort?: string;
-}): Promise<OverseasStockCatalogResponse> {
+}): Promise<OverseasStockCatalogWithPriceResponse> {
   const sp = new URLSearchParams();
   if (params.page !== undefined) sp.set('page', String(params.page));
   if (params.size !== undefined) sp.set('size', String(params.size));
@@ -48,36 +47,21 @@ export async function getOverseasStocks(params: {
   if (params.sector) sp.set('sector', params.sector);
   if (params.sort) sp.set('sort', params.sort);
   const qs = sp.toString();
-  return fetcher<OverseasStockCatalogResponse>(`${API_BASE_URL}/api/overseas-stocks${qs ? `?${qs}` : ''}`);
+  return fetcher<OverseasStockCatalogWithPriceResponse>(`${API_BASE_URL}/api/overseas-stocks${qs ? `?${qs}` : ''}`);
 }
 
 export async function searchOverseasStocks(params: {
   query: string;
   page?: number;
   size?: number;
-}): Promise<OverseasStockCatalogResponse> {
+}): Promise<OverseasStockCatalogWithPriceResponse> {
   const sp = new URLSearchParams();
   sp.set('query', params.query);
   if (params.page !== undefined) sp.set('page', String(params.page));
   if (params.size !== undefined) sp.set('size', String(params.size));
-  return fetcher<OverseasStockCatalogResponse>(`${API_BASE_URL}/api/overseas-stocks/search?${sp.toString()}`);
+  return fetcher<OverseasStockCatalogWithPriceResponse>(`${API_BASE_URL}/api/overseas-stocks/search?${sp.toString()}`);
 }
 
-export async function getOverseasStockPrice(ticker: string, exchangeCode: string): Promise<OverseasStockPrice> {
-  const raw = await fetcher<Record<string, string>>(`${API_BASE_URL}/api/overseas-stocks/${ticker}/price?exchange=${exchangeCode}`);
-  return {
-    ticker: raw.symb ?? ticker,
-    exchangeCode: raw.ovrs_icod ?? exchangeCode,
-    price: parseFloat(raw.ovrs_nmix_prpr ?? '0'),
-    changeRate: parseFloat(raw.prdy_ctrt ?? '0'),
-    changeSign: raw.prdy_vrss_sign ?? '3',
-    volume: parseFloat(raw.acml_vol ?? '0'),
-    openPrice: parseFloat(raw.ovrs_oprc ?? '0'),
-    highPrice: parseFloat(raw.ovrs_hgpr ?? '0'),
-    lowPrice: parseFloat(raw.ovrs_lwpr ?? '0'),
-    basePrice: parseFloat(raw.ovrs_nmix_prpr ?? '0'),
-  };
-}
 
 export async function buyOverseasStock(request: OverseasOrderRequest): Promise<OverseasOrderResult> {
   const raw = await fetcher<Record<string, string>>(`${API_BASE_URL}/api/overseas-orders/buy`, {
@@ -135,8 +119,20 @@ export async function getOverseasSectors(exchangeCode?: string): Promise<string[
   return fetcher<string[]>(`${API_BASE_URL}/api/overseas-stocks/sectors${qs ? `?${qs}` : ''}`);
 }
 
-export async function getTrendingOverseasStocks(): Promise<OverseasStockCatalogItem[]> {
-  return fetcher<OverseasStockCatalogItem[]>(`${API_BASE_URL}/api/overseas-stocks/trending`);
+export interface OverseasTrendingResponse {
+  stockCode: string;
+  name: string;
+  marketType: string;
+  currentPrice: string;
+  changeValue: string;
+  changeSign: string;
+  changeRate: string;
+  volume: string;
+  marketCap: string | null;
+}
+
+export async function getTrendingOverseasStocks(): Promise<OverseasTrendingResponse[]> {
+  return fetcher<OverseasTrendingResponse[]>(`${API_BASE_URL}/api/trending/overseas`);
 }
 
 export interface OverseasDailyCandle {
@@ -168,47 +164,3 @@ export async function getOverseasDailyCandles(params: {
   return raw;
 }
 
-const BATCH_CHUNK_SIZE = 50;
-
-function chunkArray<T>(array: T[], size: number): T[][] {
-  const chunks: T[][] = [];
-  for (let i = 0; i < array.length; i += size) {
-    chunks.push(array.slice(i, i + size));
-  }
-  return chunks;
-}
-
-export async function getOverseasBatchPrices(
-  requests: { ticker: string; exchangeCode: string }[]
-): Promise<Record<string, OverseasStockPrice>> {
-  const chunks = chunkArray(requests, BATCH_CHUNK_SIZE);
-  const results = await Promise.all(
-    chunks.map((chunk) =>
-      fetcher<Record<string, Record<string, string>>>(`${API_BASE_URL}/api/overseas-stocks/prices`, {
-        method: 'POST',
-        body: JSON.stringify(chunk),
-      })
-    )
-  );
-  const result: Record<string, OverseasStockPrice> = {};
-  for (const raw of results) {
-    for (const [key, r] of Object.entries(raw)) {
-      if (r.error) continue;
-      const ticker = r.symb ?? key.split('-')[0];
-      const exchangeCode = r.ovrs_icod ?? key.split('-')[1] ?? '';
-      result[key] = {
-        ticker,
-        exchangeCode,
-        price: parseFloat(r.ovrs_nmix_prpr ?? '0'),
-        changeRate: parseFloat(r.prdy_ctrt ?? '0'),
-        changeSign: r.prdy_vrss_sign ?? '3',
-        volume: parseFloat(r.acml_vol ?? '0'),
-        openPrice: parseFloat(r.ovrs_oprc ?? '0'),
-        highPrice: parseFloat(r.ovrs_hgpr ?? '0'),
-        lowPrice: parseFloat(r.ovrs_lwpr ?? '0'),
-        basePrice: parseFloat(r.ovrs_nmix_prpr ?? '0'),
-      };
-    }
-  }
-  return result;
-}

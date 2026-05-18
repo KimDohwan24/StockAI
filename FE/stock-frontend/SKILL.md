@@ -18,7 +18,7 @@
 import { StockChart } from '@/components/StockChart';
 
 export default async function DashboardPage() {
-  const stocks = await fetch('http://localhost:8080/api/v1/stocks/recommended').then(r => r.json());
+  const stocks = await fetch('http://localhost:8080/api/stocks/recommended').then(r => r.json());
   
   return (
     <div className="max-w-7xl mx-auto">
@@ -292,7 +292,7 @@ window.addEventListener('resize', handleResize);
 ```tsx
 // ✅ Best for SEO + initial data
 export default async function StockDetailPage({ params }: { params: { id: string } }) {
-  const stock = await fetch(`http://localhost:8080/api/v1/stocks/${params.id}`, {
+  const stock = await fetch(`http://localhost:8080/api/stocks/${params.id}`, {
     cache: 'no-store', // or 'force-cache' for static data
   }).then(r => r.json());
 
@@ -305,7 +305,7 @@ export default async function StockDetailPage({ params }: { params: { id: string
 }
 ```
 
-### 4.2 Client Component (SWR / React Query)
+### 4.2 Client Component (SWR)
 
 ```tsx
 // ✅ For real-time/polling data in Client Component
@@ -317,7 +317,7 @@ const fetcher = (url: string) => fetch(url).then(r => r.json());
 
 export function LivePrice({ ticker }: { ticker: string }) {
   const { data, error, isLoading } = useSWR(
-    `http://localhost:8080/api/v1/stocks/${ticker}/price`,
+    `http://localhost:8080/api/stocks/${ticker}/price`,
     fetcher,
     { refreshInterval: 5000 } // 5초 폴링
   );
@@ -388,25 +388,47 @@ import { Search, Bell, User, TrendingUp, TrendingDown, Star, ArrowUpRight } from
 ```
 src/
 ├── app/
-│   ├── (auth)/           # 그룹 라우트 (로그인/회원가입)
-│   ├── dashboard/
-│   │   └── page.tsx       # 메인 대시보드
-│   ├── stock/
-│   │   └── [id]/
-│   │       └── page.tsx   # 종목 상세 (동적 라우트)
-│   ├── layout.tsx         # 루트 레이아웃
-│   ├── page.tsx           # 메인 페이지
-│   └── globals.css        # Tailwind + 토큰
+│   ├── (main)/
+│   │   ├── page.tsx              # 메인 대시보드
+│   │   ├── stock/[code]/
+│   │   │   └── page.tsx          # 국내 종목 상세
+│   │   ├── stocks/page.tsx       # 국내 전체 종목 카탈로그
+│   │   └── overseas-stocks/
+│   │       ├── page.tsx          # 해외 종목 카탈로그
+│   │       └── [ticker]/page.tsx  # 해외 종목 상세
+│   ├── login/page.tsx            # 로그인
+│   ├── signup/page.tsx           # 회원가입
+│   ├── onboarding/page.tsx       # 온보딩 (투자성향)
+│   ├── layout.tsx                # 루트 레이아웃
+│   └── globals.css               # Tailwind + 토큰
 ├── components/
-│   ├── StockChart.tsx     # 차트 컴포넌트 (Client)
-│   ├── StockCard.tsx      # 종목 카드
-│   └── ui/                # 공통 UI 컴포넌트 (shadcn/ui)
+│   ├── stocks/                   # 국내 주식 컴포넌트
+│   ├── overseas/                 # 해외 주식 컴포넌트
+│   ├── StockChart.tsx            # Lightweight Charts (Client)
+│   ├── Sparkline.tsx
+│   ├── Navbar.tsx
+│   └── AuthGuard.tsx
 ├── hooks/
-│   └── useStockData.ts    # 데이터 페칭 훅
+│   ├── useInView.ts
+│   ├── useStockPriceStream.ts
+│   └── useVisibility.ts
 ├── lib/
-│   └── utils.ts           # 유틸리티 (cn 함수 등)
-└── types/
-    └── stock.ts           # TypeScript 인터페이스
+│   ├── api.ts
+│   ├── fetcher.ts
+│   ├── auth.tsx
+│   ├── websocket.ts
+│   └── sectorMap.ts
+├── services/
+│   ├── stockCatalogApi.ts
+│   └── overseasStockApi.ts
+├── types/
+│   ├── stock.ts
+│   ├── overseasStock.ts
+│   └── websocket.ts
+├── provider/
+│   └── WebSocketProvider.tsx
+└── constants/
+    └── countryFlags.ts
 ```
 
 ---

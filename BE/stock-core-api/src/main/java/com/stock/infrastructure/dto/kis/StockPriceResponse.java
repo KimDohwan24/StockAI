@@ -1,10 +1,15 @@
 package com.stock.infrastructure.dto.kis;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Data;
 
 @Data
+@JsonInclude(JsonInclude.Include.NON_NULL)
 public class StockPriceResponse {
-    private String rprs_mrkt_kor_name;    // 대표시장한글명 (KOSPI/KOSDAQ)
+    @JsonProperty(access = JsonProperty.Access.READ_ONLY)
+    private String error;
+    private String rprs_mrkt_kor_name;
     private String hts_kor_isnm;          // HTS한글종목명
     private String stck_prpr;             // 주식현재가
     private String prdy_vrss;             // 전일대비

@@ -28,3 +28,7 @@ FE/stock-frontend/node_modules/
 FE/stock-frontend/.next/
 BE/stock-ai-server/venv/
 BE/stock-ai-server/__pycache__/
+
+# Local launcher scripts
+run-servers.bat
+run-opencode.bat

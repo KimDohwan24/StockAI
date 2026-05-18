@@ -1,7 +1,7 @@
 import asyncio
 import json
 import logging
-from typing import Callable, List
+from typing import Awaitable, Callable, List, Union
 
 from aiokafka import AIOKafkaConsumer
 from app.core.config import settings
@@ -20,9 +20,9 @@ class KafkaConsumer:
         self.bootstrap_servers = bootstrap_servers
         self.group_id = group_id
         self._consumer: AIOKafkaConsumer | None = None
-        self._handlers: List[Callable[[dict], None]] = []
+        self._handlers: List[Union[Callable[[dict], None], Callable[[dict], Awaitable[None]]]] = []
 
-    def add_handler(self, handler: Callable[[dict], None]):
+    def add_handler(self, handler: Union[Callable[[dict], None], Callable[[dict], Awaitable[None]]]):
         self._handlers.append(handler)
 
     async def start(self):
@@ -43,7 +43,9 @@ class KafkaConsumer:
                 logger.debug(f"Received message: {data}")
                 for handler in self._handlers:
                     try:
-                        handler(data)
+                        result = handler(data)
+                        if asyncio.iscoroutine(result):
+                            await result
                     except Exception as e:
                         logger.error(f"Handler error: {e}", exc_info=True)
         except asyncio.CancelledError:

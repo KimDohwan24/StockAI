@@ -16,20 +16,21 @@ export interface OverseasStockCatalogWithPrice extends OverseasStockCatalogItem 
   changeSign: string | null;
   changeRate: string | null;
   volume: string | null;
+  priceUpdatedAt: string | null;
 }
 
 export interface OverseasStockCatalogWithPriceResponse {
   content: OverseasStockCatalogWithPrice[];
-  page: number;
-  size: number;
+  pageNumber: number;
+  pageSize: number;
   totalElements: number;
   totalPages: number;
 }
 
 export interface OverseasStockCatalogResponse {
   content: OverseasStockCatalogItem[];
-  page: number;
-  size: number;
+  pageNumber: number;
+  pageSize: number;
   totalElements: number;
   totalPages: number;
 }

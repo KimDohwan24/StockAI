@@ -2,6 +2,7 @@
 
 import { SWRConfig } from 'swr';
 import Navbar from '@/components/Navbar';
+import { WebSocketProvider } from '@/provider/WebSocketProvider';
 
 export default function MainLayout({
   children,
@@ -21,8 +22,10 @@ export default function MainLayout({
         },
       }}
     >
-      <Navbar />
-      {children}
+      <WebSocketProvider>
+        <Navbar />
+        {children}
+      </WebSocketProvider>
     </SWRConfig>
   );
 }

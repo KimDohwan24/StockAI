@@ -25,7 +25,9 @@ interface AuthContextValue {
 function parseJwt(token: string): { sub?: string; name?: string; email?: string; exp?: number } | null {
   try {
     const payload = token.split('.')[1];
-    const json = atob(payload.replace(/-/g, '+').replace(/_/g, '/'));
+    const base64 = payload.replace(/-/g, '+').replace(/_/g, '/');
+    const binary = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+    const json = new TextDecoder().decode(binary);
     return JSON.parse(json);
   } catch {
     return null;

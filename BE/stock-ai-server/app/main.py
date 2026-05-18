@@ -21,9 +21,8 @@ async def lifespan(app: FastAPI):
     # Startup
     logger.info("Starting up stock-ai-server...")
     await redis_client.connect()
-    # TODO: DB 테이블 생성 (필요시)
-    # async with engine.begin() as conn:
-    #     await conn.run_sync(Base.metadata.create_all)
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
     yield
     # Shutdown
     logger.info("Shutting down stock-ai-server...")

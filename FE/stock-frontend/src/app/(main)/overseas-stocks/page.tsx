@@ -6,13 +6,12 @@ import OverseasSectorFilter from '@/components/overseas/OverseasSectorFilter';
 import SortSelect from '@/components/stocks/SortSelect';
 import OverseasStockCatalogInfinite from '@/components/overseas/OverseasStockCatalogInfinite';
 import { getOverseasStocks, extractOverseasInitialPricesFromCatalog } from '@/services/overseasStockApi';
-import type { OverseasStockCatalogWithPriceResponse } from '@/types/overseasStock';
 
 export const metadata: Metadata = {
   title: '해외 종목 | StockAI',
 };
 
-export const revalidate = 30;
+export const revalidate = 60;
 
 async function OverseasStockCatalogContent({
   searchParams,
@@ -26,20 +25,13 @@ async function OverseasStockCatalogContent({
   const sort = typeof params.sort === 'string' ? params.sort : undefined;
 
   let initialData;
-  let initialPrices: Record<string, import('@/types/overseasStock').OverseasStockPrice> = {};
   try {
-    const enriched: OverseasStockCatalogWithPriceResponse = await getOverseasStocks({ page: 0, size: 20, exchangeCode, country, sector, sort }) as unknown as OverseasStockCatalogWithPriceResponse;
-    initialData = {
-      content: enriched.content.map(({ currentPrice, change, changeSign, changeRate, volume, ...rest }) => rest),
-      page: enriched.page,
-      size: enriched.size,
-      totalElements: enriched.totalElements,
-      totalPages: enriched.totalPages,
-    };
-    initialPrices = extractOverseasInitialPricesFromCatalog(enriched);
+    initialData = await getOverseasStocks({ page: 0, size: 20, exchangeCode, country, sector, sort });
   } catch {
-    initialData = { content: [], page: 0, size: 20, totalElements: 0, totalPages: 0 };
+    initialData = { content: [], pageNumber: 0, pageSize: 20, totalElements: 0, totalPages: 0 };
   }
+
+  const initialPrices = extractOverseasInitialPricesFromCatalog(initialData);
 
   return (
     <OverseasStockCatalogInfinite

@@ -337,16 +337,16 @@ export async function getTrades(): Promise<TradeResponse[]> {
 //  Order APIs
 // ═══════════════════════════════════════════════════════════
 
-export async function buyOrder(stockCode: string, quantity: number): Promise<OrderResult> {
+export async function buyOrder(stockCode: string, quantity: number, price: number): Promise<OrderResult> {
   return fetcher<OrderResult>(`${API_BASE_URL}/api/orders/buy`, {
     method: 'POST',
-    body: JSON.stringify({ stockCode, quantity }),
+    body: JSON.stringify({ stockCode, quantity, price }),
   });
 }
 
-export async function sellOrder(stockCode: string, quantity: number): Promise<OrderResult> {
+export async function sellOrder(stockCode: string, quantity: number, price: number): Promise<OrderResult> {
   return fetcher<OrderResult>(`${API_BASE_URL}/api/orders/sell`, {
     method: 'POST',
-    body: JSON.stringify({ stockCode, quantity }),
+    body: JSON.stringify({ stockCode, quantity, price }),
   });
 }

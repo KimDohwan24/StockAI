@@ -1,7 +1,6 @@
 'use client';
 
 import { useParams, useSearchParams } from 'next/navigation';
-import useSWR from 'swr';
 import {
   TrendingUp,
   TrendingDown,
@@ -15,10 +14,8 @@ import {
   DollarSign,
   Percent,
 } from 'lucide-react';
-import { getOverseasStockPrice } from '@/services/overseasStockApi';
 import type { ExchangeCode, CountryCode, OverseasStockPrice } from '@/types/overseasStock';
 import { COUNTRY_FLAGS } from '@/constants/countryFlags';
-import { useVisibility } from '@/hooks/useVisibility';
 import OverseasOrderPanel from '@/components/overseas/OverseasOrderPanel';
 
 function fmt(n: number, currency: string): string {
@@ -60,20 +57,34 @@ function InfoCard({
   );
 }
 
+function buildPriceFromParams(
+  ticker: string,
+  exchangeCode: string,
+  sp: URLSearchParams,
+): OverseasStockPrice | null {
+  const price = sp.get('price');
+  if (!price) return null;
+  return {
+    ticker,
+    exchangeCode,
+    price: parseFloat(price) || 0,
+    changeRate: parseFloat(sp.get('changeRate') ?? '0') || 0,
+    changeSign: sp.get('changeSign') ?? '3',
+    volume: parseFloat(sp.get('volume') ?? '0') || 0,
+    openPrice: 0,
+    highPrice: 0,
+    lowPrice: 0,
+    basePrice: parseFloat(sp.get('basePrice') ?? '0') || 0,
+  };
+}
+
 export default function OverseasStockDetailPage() {
   const params = useParams();
   const searchParams = useSearchParams();
   const ticker = (params.ticker as string) || '';
   const exchangeCode = (searchParams.get('exchange') as ExchangeCode) || 'NAS';
-  const isVisible = useVisibility();
 
-  const { data: priceInfo, error: priceError } = useSWR<OverseasStockPrice>(
-    ticker ? `overseas-detail-price-${ticker}-${exchangeCode}` : null,
-    () => getOverseasStockPrice(ticker, exchangeCode),
-    { refreshInterval: isVisible ? 10000 : 0, dedupingInterval: 5000 }
-  );
-
-  const isLoading = !priceInfo && !priceError;
+  const priceInfo = buildPriceFromParams(ticker, exchangeCode, searchParams);
 
   const isUp = priceInfo?.changeSign === '1' || priceInfo?.changeSign === '2';
   const isDown = priceInfo?.changeSign === '4' || priceInfo?.changeSign === '5';
@@ -150,7 +161,7 @@ export default function OverseasStockDetailPage() {
               </div>
             </section>
 
-            {/* Detail Grid — 해외 주식 특화 정보 (더미 데이터, BE API 연동 시 교체) */}
+            {/* Detail Grid */}
             <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               <InfoCard icon={<Hash className="w-4 h-4" />} label="PER / PBR" value="— / —" sub="데이터 준비 중" />
               <InfoCard icon={<DollarSign className="w-4 h-4" />} label="EPS / BPS" value="— / —" sub="데이터 준비 중" />

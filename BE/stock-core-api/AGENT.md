@@ -3,6 +3,8 @@
 > AI 뉴스 기반 주식 추천 서비스의 **Core API** (Spring Boot)
 > 금융 트랜잭션, 인증, 외부 AI 서버(FastAPI) 오케스트레이션 담당
 > 이 폴더의 AGENT.md는 **BackEnd** 전용임. FE에 관련되어서는 FE의 AGENT.md를 확인하라.
+> 파일 수정이 이루어질 경우 bootJar를 업데이트해라
+
 ---
 
 ## 1. 프로젝트 개요

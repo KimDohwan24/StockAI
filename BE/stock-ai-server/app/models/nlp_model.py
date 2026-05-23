@@ -38,3 +38,19 @@ class NLPModel:
         score = round(random.uniform(-1.0, 1.0), 4)
         confidence = round(random.uniform(0.7, 1.0), 4)
         return score, confidence
+
+    def predict_batch(self, texts: list[str]) -> list[tuple[float, float]]:
+        """
+        여러 텍스트의 감성 점수와 신뢰도를 일괄 반환
+        Returns:
+            list[tuple[sentiment_score, confidence]]
+        """
+        if not self._loaded:
+            raise RuntimeError("Model is not loaded yet")
+        # TODO: 실제 일괄 추론 로직 (배치 토크나이징 및 배치 추론)
+        results = []
+        for _ in texts:
+            score = round(random.uniform(-1.0, 1.0), 4)
+            confidence = round(random.uniform(0.7, 1.0), 4)
+            results.append((score, confidence))
+        return results

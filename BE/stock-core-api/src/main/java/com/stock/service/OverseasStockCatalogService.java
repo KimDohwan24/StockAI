@@ -14,14 +14,9 @@ import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.time.format.DateTimeFormatter;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
-import java.util.function.Function;
-import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -32,33 +27,9 @@ public class OverseasStockCatalogService {
 
     private final OverseasStockMasterRepository overseasStockMasterRepository;
     private final KisApiClient kisApiClient;
+    private final StockSyncTransactionService stockSyncTransactionService;
 
-    private static final Map<String, String> EXCHANGE_COUNTRY_MAP = new HashMap<>();
-    private static final Map<String, String> EXCHANGE_CURRENCY_MAP = new HashMap<>();
 
-    static {
-        EXCHANGE_COUNTRY_MAP.put("NAS", "US");
-        EXCHANGE_COUNTRY_MAP.put("NYS", "US");
-        EXCHANGE_COUNTRY_MAP.put("AMS", "US");
-
-        EXCHANGE_CURRENCY_MAP.put("NAS", "USD");
-        EXCHANGE_CURRENCY_MAP.put("NYS", "USD");
-        EXCHANGE_CURRENCY_MAP.put("AMS", "USD");
-    }
-
-    private String resolveCountry(String apiNatnCd, ExchangeCode exchangeCode) {
-        if (apiNatnCd != null && !apiNatnCd.isBlank()) {
-            return apiNatnCd;
-        }
-        return EXCHANGE_COUNTRY_MAP.getOrDefault(exchangeCode.name(), "UNKNOWN");
-    }
-
-    private String resolveCurrency(String apiCrcyCd, ExchangeCode exchangeCode) {
-        if (apiCrcyCd != null && !apiCrcyCd.isBlank()) {
-            return apiCrcyCd;
-        }
-        return EXCHANGE_CURRENCY_MAP.getOrDefault(exchangeCode.name(), "UNKNOWN");
-    }
 
     @Cacheable(value = "overseasCatalog", key = "#exchangeCode + '_' + #pageable.pageNumber + '_' + #pageable.pageSize")
     public CatalogPageResponse<OverseasStockCatalogResponse> findByExchangeCode(ExchangeCode exchangeCode, Pageable pageable) {
@@ -143,9 +114,8 @@ public class OverseasStockCatalogService {
     }
 
     @CacheEvict(value = {"overseasCatalog", "overseasSearch", "sectors"}, allEntries = true)
-    @Transactional
     public int syncFromKis() {
-        int deleted = overseasStockMasterRepository.deleteByExchangeCodeNotIn(
+        int deleted = stockSyncTransactionService.deleteOverseasStocksNotIn(
                 List.of(ExchangeCode.values())
         );
         if (deleted > 0) {
@@ -155,67 +125,16 @@ public class OverseasStockCatalogService {
         int totalSynced = 0;
         for (ExchangeCode exchangeCode : ExchangeCode.values()) {
             try {
-                totalSynced += syncExchange(exchangeCode);
+                List<KisOverseasStockMasterItem> items = kisApiClient.getOverseasStockMasterList(exchangeCode.name());
+                if (!items.isEmpty()) {
+                    totalSynced += stockSyncTransactionService.saveOverseasExchangeItems(exchangeCode, items);
+                }
             } catch (Exception e) {
                 log.error("Failed to sync exchange {}: {}", exchangeCode, e.getMessage(), e);
             }
         }
         log.info("Overseas stock master sync completed. Total synced: {}", totalSynced);
         return totalSynced;
-    }
-
-    @Transactional
-    public int syncExchange(ExchangeCode exchangeCode) {
-        List<KisOverseasStockMasterItem> items = kisApiClient.getOverseasStockMasterList(exchangeCode.name());
-        if (items.isEmpty()) {
-            log.warn("No items returned for exchange {}", exchangeCode);
-            return 0;
-        }
-
-        List<String> tickers = items.stream()
-                .map(KisOverseasStockMasterItem::getSymb)
-                .filter(t -> t != null && !t.isBlank())
-                .toList();
-
-        Map<String, OverseasStockMaster> existingMap = overseasStockMasterRepository
-                .findByTickerInAndExchangeCode(tickers, exchangeCode).stream()
-                .collect(Collectors.toMap(OverseasStockMaster::getTicker, Function.identity()));
-
-        int count = 0;
-        for (KisOverseasStockMasterItem item : items) {
-            try {
-                String ticker = item.getSymb();
-                if (ticker == null || ticker.isBlank()) continue;
-
-                String country = resolveCountry(item.getTr_natn_cd(), exchangeCode);
-                String currency = resolveCurrency(item.getCrcy_cd(), exchangeCode);
-                String sector = item.getKor_sect_nm();
-
-                OverseasStockMaster existing = existingMap.get(ticker);
-                if (existing != null) {
-                    String updateSector = sector != null ? sector : existing.getSector();
-                    existing.updateFrom(item.getItem_name(), updateSector, country, currency);
-                } else {
-                    OverseasStockMaster stock = new OverseasStockMaster(
-                            ticker,
-                            item.getItem_name(),
-                            exchangeCode,
-                            country,
-                            sector,
-                            currency
-                    );
-                    existingMap.put(ticker, stock);
-                    count++;
-                }
-            } catch (Exception e) {
-                log.error("Failed to sync overseas stock item: symb={}, name={}, error={}",
-                        item.getSymb(), item.getItem_name(), e.getMessage());
-            }
-        }
-
-        overseasStockMasterRepository.saveAll(existingMap.values());
-        log.info("Synced {} new stocks for exchange {} (batch saved {} total)", count, exchangeCode, existingMap.size());
-        return count;
     }
 
     private OverseasStockCatalogResponse toResponse(OverseasStockMaster stock) {

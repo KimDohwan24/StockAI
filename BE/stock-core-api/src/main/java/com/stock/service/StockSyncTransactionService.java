@@ -1,25 +1,44 @@
 package com.stock.service;
 
+import com.stock.domain.overseas.ExchangeCode;
+import com.stock.domain.overseas.OverseasStockMaster;
+import com.stock.domain.overseas.OverseasStockMasterRepository;
+import com.stock.domain.stock.MarketType;
 import com.stock.domain.stock.StockMaster;
 import com.stock.domain.stock.StockMasterRepository;
-import com.stock.infrastructure.client.KisApiClient;
 import com.stock.infrastructure.dto.kis.KisStockMasterItem;
+import com.stock.infrastructure.dto.kis.KisOverseasStockMasterItem;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
-public class StockMasterSyncService {
+public class StockSyncTransactionService {
 
     private final StockMasterRepository stockMasterRepository;
-    private final KisApiClient kisApiClient;
-    private final StockSyncTransactionService stockSyncTransactionService;
+    private final OverseasStockMasterRepository overseasStockMasterRepository;
+
+    private static final Map<String, String> EXCHANGE_COUNTRY_MAP = new HashMap<>();
+    private static final Map<String, String> EXCHANGE_CURRENCY_MAP = new HashMap<>();
+
+    static {
+        EXCHANGE_COUNTRY_MAP.put("NAS", "US");
+        EXCHANGE_COUNTRY_MAP.put("NYS", "US");
+        EXCHANGE_COUNTRY_MAP.put("AMS", "US");
+
+        EXCHANGE_CURRENCY_MAP.put("NAS", "USD");
+        EXCHANGE_CURRENCY_MAP.put("NYS", "USD");
+        EXCHANGE_CURRENCY_MAP.put("AMS", "USD");
+    }
 
     private static final Map<String, String> SECTOR_CODE_MAP = Map.ofEntries(
             Map.entry("1", "건설"),
@@ -202,43 +221,120 @@ public class StockMasterSyncService {
             Map.entry("0591", "기타")
     );
 
-
-
-    public int syncFromKis() {
-        int totalSynced = 0;
-        String[] marketDivCodes = {"1", "2"};
-        for (String marketDivCode : marketDivCodes) {
-            try {
-                List<KisStockMasterItem> items = kisApiClient.getStockMasterList(marketDivCode);
-                if (!items.isEmpty()) {
-                    totalSynced += stockSyncTransactionService.saveDomesticMarketItems(marketDivCode, items);
-                }
-            } catch (Exception e) {
-                log.error("Failed to sync market {}: {}", marketDivCode, e.getMessage(), e);
-            }
+    private String resolveSectorName(String code) {
+        if (code == null || code.isBlank()) return null;
+        String trimmed = code.trim();
+        if (trimmed.matches(".*[가-힣].*")) return trimmed;
+        String name = SECTOR_CODE_MAP.get(trimmed);
+        if (name == null) {
+            log.warn("Unknown sector code: '{}' — not in SECTOR_CODE_MAP", trimmed);
         }
-        log.info("Stock master sync completed. Total synced: {}", totalSynced);
-        return totalSynced;
+        return name != null ? name : null;
+    }
+
+    private String resolveCountry(String apiNatnCd, ExchangeCode exchangeCode) {
+        if (apiNatnCd != null && !apiNatnCd.isBlank()) {
+            return apiNatnCd;
+        }
+        return EXCHANGE_COUNTRY_MAP.getOrDefault(exchangeCode.name(), "UNKNOWN");
+    }
+
+    private String resolveCurrency(String apiCrcyCd, ExchangeCode exchangeCode) {
+        if (apiCrcyCd != null && !apiCrcyCd.isBlank()) {
+            return apiCrcyCd;
+        }
+        return EXCHANGE_CURRENCY_MAP.getOrDefault(exchangeCode.name(), "UNKNOWN");
     }
 
     @Transactional
-    public int remapSectorCodes() {
-        List<StockMaster> allStocks = stockMasterRepository.findAll();
-        int updated = 0;
-        for (StockMaster stock : allStocks) {
-            String sector = stock.getSector();
-            if (sector == null || sector.isBlank()) continue;
-            if (sector.matches(".*[가-힣].*")) continue;
-            String mapped = SECTOR_CODE_MAP.get(sector.trim());
-            if (mapped != null) {
-                stock.setSector(mapped);
-                updated++;
+    public int saveDomesticMarketItems(String marketDivCode, List<KisStockMasterItem> items) {
+        List<String> stockCodes = items.stream()
+                .map(KisStockMasterItem::getSht_cd)
+                .filter(c -> c != null && !c.isBlank())
+                .toList();
+
+        MarketType marketType = "1".equals(marketDivCode) ? MarketType.KOSPI : MarketType.KOSDAQ;
+
+        Map<String, StockMaster> existingMap = stockMasterRepository
+                .findByStockCodeIn(stockCodes).stream()
+                .collect(Collectors.toMap(StockMaster::getStockCode, Function.identity()));
+
+        int count = 0;
+        for (KisStockMasterItem item : items) {
+            try {
+                String stockCode = item.getSht_cd();
+                if (stockCode == null || stockCode.isBlank()) continue;
+
+                String sector = resolveSectorName(item.getKor_sect_tp_cd());
+                StockMaster existing = existingMap.get(stockCode);
+                if (existing != null) {
+                    existing.updateFrom(item.getKor_abbrv(), sector);
+                } else {
+                    StockMaster stock = new StockMaster(stockCode, item.getKor_abbrv(), sector, marketType);
+                    existingMap.put(stockCode, stock);
+                    count++;
+                }
+            } catch (Exception e) {
+                log.error("Failed to sync stock item: code={}, name={}, error={}",
+                        item.getSht_cd(), item.getKor_abbrv(), e.getMessage());
             }
         }
-        if (updated > 0) {
-            stockMasterRepository.saveAll(allStocks);
+
+        stockMasterRepository.saveAll(existingMap.values());
+        log.info("Synced {} new stocks for market {} (batch saved {} total)", count, marketDivCode, existingMap.size());
+        return count;
+    }
+
+    @Transactional
+    public int saveOverseasExchangeItems(ExchangeCode exchangeCode, List<KisOverseasStockMasterItem> items) {
+        List<String> tickers = items.stream()
+                .map(KisOverseasStockMasterItem::getSymb)
+                .filter(t -> t != null && !t.isBlank())
+                .toList();
+
+        Map<String, OverseasStockMaster> existingMap = overseasStockMasterRepository
+                .findByTickerInAndExchangeCode(tickers, exchangeCode).stream()
+                .collect(Collectors.toMap(OverseasStockMaster::getTicker, Function.identity()));
+
+        int count = 0;
+        for (KisOverseasStockMasterItem item : items) {
+            try {
+                String ticker = item.getSymb();
+                if (ticker == null || ticker.isBlank()) continue;
+
+                String country = resolveCountry(item.getTr_natn_cd(), exchangeCode);
+                String currency = resolveCurrency(item.getCrcy_cd(), exchangeCode);
+                String sector = item.getKor_sect_nm();
+
+                OverseasStockMaster existing = existingMap.get(ticker);
+                if (existing != null) {
+                    String updateSector = sector != null ? sector : existing.getSector();
+                    existing.updateFrom(item.getItem_name(), updateSector, country, currency);
+                } else {
+                    OverseasStockMaster stock = new OverseasStockMaster(
+                            ticker,
+                            item.getItem_name(),
+                            exchangeCode,
+                            country,
+                            sector,
+                            currency
+                    );
+                    existingMap.put(ticker, stock);
+                    count++;
+                }
+            } catch (Exception e) {
+                log.error("Failed to sync overseas stock item: symb={}, name={}, error={}",
+                        item.getSymb(), item.getItem_name(), e.getMessage());
+            }
         }
-        log.info("Sector code remap completed. {} rows updated.", updated);
-        return updated;
+
+        overseasStockMasterRepository.saveAll(existingMap.values());
+        log.info("Synced {} new stocks for exchange {} (batch saved {} total)", count, exchangeCode, existingMap.size());
+        return count;
+    }
+
+    @Transactional
+    public int deleteOverseasStocksNotIn(List<ExchangeCode> exchangeCodes) {
+        return overseasStockMasterRepository.deleteByExchangeCodeNotIn(exchangeCodes);
     }
 }

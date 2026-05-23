@@ -21,8 +21,6 @@ class SentimentService:
     async def analyze_batch(self, texts: list[str]) -> list[SentimentResult]:
         if self.model is None:
             raise RuntimeError("NLPModel is not provided to SentimentService")
-        results = []
-        for text in texts:
-            score, confidence = self.model.predict(text)
-            results.append(SentimentResult(score=score, confidence=confidence))
-        return results
+        # Use batch predict to optimize performance
+        predictions = self.model.predict_batch(texts)
+        return [SentimentResult(score=score, confidence=confidence) for score, confidence in predictions]

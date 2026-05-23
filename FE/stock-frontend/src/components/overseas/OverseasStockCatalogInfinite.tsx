@@ -35,6 +35,7 @@ export default function OverseasStockCatalogInfinite({
   const [prevFilterKey, setPrevFilterKey] = useState(filterKeyStr);
   const [priceUpdates, setPriceUpdates] = useState<Record<string, OverseasStockPrice>>(initialPrices ?? {});
 
+
   if (prevFilterKey !== filterKeyStr) {
     setPrevFilterKey(filterKeyStr);
     setCurrentPage(0);
@@ -57,6 +58,39 @@ export default function OverseasStockCatalogInfinite({
     },
     [loadedPages]
   );
+
+  const lastScrollYRef = useRef<number>(0);
+  const isRestoringRef = useRef<boolean>(false);
+  const lastLoadedTimeRef = useRef<number>(0);
+
+  useEffect(() => {
+    if (!isLoadingMore) {
+      lastLoadedTimeRef.current = Date.now();
+    }
+  }, [isLoadingMore]);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      if (isRestoringRef.current) return;
+
+      if (window.scrollY > 0) {
+        lastScrollYRef.current = window.scrollY;
+      } else if (window.scrollY === 0 && lastScrollYRef.current > 100) {
+        const recentlyLoaded = Date.now() - lastLoadedTimeRef.current < 1500;
+        if (isLoadingMore || recentlyLoaded) {
+          isRestoringRef.current = true;
+          window.scrollTo(0, lastScrollYRef.current);
+          setTimeout(() => {
+            isRestoringRef.current = false;
+          }, 50);
+        }
+      }
+    };
+
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, [isLoadingMore]);
+
 
   const prefetchKey = hasNext && !isLoadingMore
     ? [`overseas-prefetch`, nextPage, exchangeCode, country, sector, sort]

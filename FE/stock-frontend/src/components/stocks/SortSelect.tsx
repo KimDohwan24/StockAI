@@ -39,7 +39,8 @@ export default function SortSelect({ basePath }: SortSelectProps) {
   const handleFieldChange = (value: string) => {
     const params = new URLSearchParams(searchParams.toString());
     if (value) {
-      params.set('sort', `${value},${currentDir}`);
+      const defaultDir = (value === 'name' || value === 'stockCode' || value === 'ticker') ? 'asc' : 'desc';
+      params.set('sort', `${value},${defaultDir}`);
     } else {
       params.delete('sort');
     }

@@ -20,7 +20,7 @@ interface StockCatalogInfiniteProps {
 
 const PAGE_SIZE = 20;
 
-const CLIENT_SORT_FIELDS = new Set(['upperLimit', 'lowerLimit']);
+const CLIENT_SORT_FIELDS = new Set<string>();
 
 function sortItems(
   items: StockCatalogWithPrice[],
@@ -32,13 +32,19 @@ function sortItems(
   const [field, dir] = sort.includes(',') ? sort.split(',') : [sort, 'asc'];
   const isAsc = dir === 'asc';
 
-  if (CLIENT_SORT_FIELDS.has(field)) {
+  if (field === 'upperLimit') {
     return [...items].sort((a, b) => {
-      const pa = prices[a.stockCode];
-      const pb = prices[b.stockCode];
-      const va = pa ? (pa as unknown as Record<string, number>)[field] ?? 0 : 0;
-      const vb = pb ? (pb as unknown as Record<string, number>)[field] ?? 0 : 0;
+      const va = prices[a.stockCode]?.changeRate ?? 0;
+      const vb = prices[b.stockCode]?.changeRate ?? 0;
       return isAsc ? va - vb : vb - va;
+    });
+  }
+
+  if (field === 'lowerLimit') {
+    return [...items].sort((a, b) => {
+      const va = prices[a.stockCode]?.changeRate ?? 0;
+      const vb = prices[b.stockCode]?.changeRate ?? 0;
+      return isAsc ? vb - va : va - vb;
     });
   }
 
@@ -107,13 +113,13 @@ export default function StockCatalogInfinite({
   const [isFetchingPrices, setIsFetchingPrices] = useState(false);
   const attemptedCodes = useRef<Set<string>>(new Set());
 
+
   if (prevFilterKey !== filterKeyStr) {
     setPrevFilterKey(filterKeyStr);
     setCurrentPage(0);
     setLoadedPages([initialData]);
     setCatalogPrices(initialPrices ?? {});
     setFetchedPrices({});
-    attemptedCodes.current.clear();
   }
 
   const nextPage = currentPage + 1;
@@ -131,16 +137,60 @@ export default function StockCatalogInfinite({
     [loadedPages]
   );
 
+  const lastScrollYRef = useRef<number>(0);
+  const isRestoringRef = useRef<boolean>(false);
+  const lastLoadedTimeRef = useRef<number>(0);
+
+  useEffect(() => {
+    if (!isLoadingMore && !isFetchingPrices) {
+      lastLoadedTimeRef.current = Date.now();
+    }
+  }, [isLoadingMore, isFetchingPrices]);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      if (isRestoringRef.current) return;
+
+      if (window.scrollY > 0) {
+        lastScrollYRef.current = window.scrollY;
+      } else if (window.scrollY === 0 && lastScrollYRef.current > 100) {
+        const recentlyLoaded = Date.now() - lastLoadedTimeRef.current < 1500;
+        if (isLoadingMore || isFetchingPrices || recentlyLoaded) {
+          isRestoringRef.current = true;
+          window.scrollTo(0, lastScrollYRef.current);
+          setTimeout(() => {
+            isRestoringRef.current = false;
+          }, 50);
+        }
+      }
+    };
+
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, [isLoadingMore, isFetchingPrices]);
+
   const allStockCodes = useMemo(
     () => allItems.map((item) => item.stockCode),
     [allItems]
   );
 
-  const wsPrices = useStockPriceStreamBatch(allStockCodes, catalogPrices);
+  const combinedInitialPrices = useMemo(
+    () => ({ ...catalogPrices, ...fetchedPrices }),
+    [catalogPrices, fetchedPrices]
+  );
+
+  const wsPrices = useStockPriceStreamBatch(allStockCodes, combinedInitialPrices);
+
+  useEffect(() => {
+    attemptedCodes.current.clear();
+  }, [filterKeyStr]);
 
   useEffect(() => {
     const toFetch = allStockCodes.filter(
-      (code) => !catalogPrices[code] && !fetchedPrices[code] && !attemptedCodes.current.has(code)
+      (code) =>
+        (!catalogPrices[code] || catalogPrices[code].upperLimit === 0) &&
+        !fetchedPrices[code] &&
+        !attemptedCodes.current.has(code)
     );
 
     if (toFetch.length === 0) return;
@@ -158,8 +208,8 @@ export default function StockCatalogInfinite({
   }, [allStockCodes, catalogPrices, fetchedPrices]);
 
   const mergedPrices = useMemo(
-    () => ({ ...catalogPrices, ...fetchedPrices, ...wsPrices }),
-    [catalogPrices, fetchedPrices, wsPrices]
+    () => ({ ...combinedInitialPrices, ...wsPrices }),
+    [combinedInitialPrices, wsPrices]
   );
 
   const prefetchKey = hasNext && !isLoadingMore

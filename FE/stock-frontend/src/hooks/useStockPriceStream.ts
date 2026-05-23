@@ -67,25 +67,27 @@ export function useStockPriceStream(
   const initialPriceRef = useRef<MappedStockPrice | null>(initialPrice ?? null);
 
   const handleMessageRef = useRef<(message: IMessage) => void>(() => {});
-  handleMessageRef.current = (message: IMessage) => {
-    try {
-      const dto: RealtimeStockPriceDto = JSON.parse(message.body);
-      const mapped = mapRealtimeToMapped(dto);
+  useEffect(() => {
+    handleMessageRef.current = (message: IMessage) => {
+      try {
+        const dto: RealtimeStockPriceDto = JSON.parse(message.body);
+        const mapped = mapRealtimeToMapped(dto);
 
-      if (mergedRef.current) {
-        mergedRef.current = mergeDefined(mergedRef.current, mapped);
-      } else if (initialPriceRef.current) {
-        mergedRef.current = mergeDefined(initialPriceRef.current, mapped);
-      } else {
-        mergedRef.current = mapped as MappedStockPrice;
+        if (mergedRef.current) {
+          mergedRef.current = mergeDefined(mergedRef.current, mapped);
+        } else if (initialPriceRef.current) {
+          mergedRef.current = mergeDefined(initialPriceRef.current, mapped);
+        } else {
+          mergedRef.current = mapped as MappedStockPrice;
+        }
+
+        setPrice({ ...mergedRef.current });
+        setLastUpdated(new Date());
+      } catch {
+        // ignore parse errors
       }
-
-      setPrice({ ...mergedRef.current });
-      setLastUpdated(new Date());
-    } catch {
-      // ignore parse errors
-    }
-  };
+    };
+  });
 
   const stableHandler = useCallback((message: IMessage) => {
     handleMessageRef.current?.(message);

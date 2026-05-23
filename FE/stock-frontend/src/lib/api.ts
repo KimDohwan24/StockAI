@@ -238,7 +238,9 @@ export function mapDailyCandles(raw: DailyPriceItem[]): MappedDailyCandle[] {
 }
 
 export function mapMinuteCandles(raw: MinutePriceItem[]): MappedMinuteCandle[] {
-  return raw
+  if (!raw || !Array.isArray(raw)) return [];
+
+  const mapped = raw
     .map((d) => {
       const date = d.stck_bsop_date ?? '';
       const hour = d.stck_cntg_hour ?? '';
@@ -256,7 +258,22 @@ export function mapMinuteCandles(raw: MinutePriceItem[]): MappedMinuteCandle[] {
         value: num(d.acml_tr_pbmn),
       };
     })
-    .reverse();
+    .filter((candle) => candle.close > 0);
+
+  // Sort by time ascending (mandatory for lightweight-charts)
+  mapped.sort((a, b) => a.time.localeCompare(b.time));
+
+  // Deduplicate timestamps to prevent rendering glitches
+  const uniqueMapped: MappedMinuteCandle[] = [];
+  const seenTimes = new Set<string>();
+  for (const candle of mapped) {
+    if (!seenTimes.has(candle.time)) {
+      seenTimes.add(candle.time);
+      uniqueMapped.push(candle);
+    }
+  }
+
+  return uniqueMapped;
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -349,4 +366,50 @@ export async function sellOrder(stockCode: string, quantity: number, price: numb
     method: 'POST',
     body: JSON.stringify({ stockCode, quantity, price }),
   });
+}
+
+// ═══════════════════════════════════════════════════════════
+//  AI Recommendation & Analysis APIs
+// ═══════════════════════════════════════════════════════════
+
+export interface StockNewsItem {
+  title: string;
+  link: string;
+  source: string;
+  pubDate: string;
+  sentiment: 'positive' | 'negative' | 'neutral';
+  sentimentScore: number;
+  confidence: number;
+}
+
+export interface StockAiAnalysisResponse {
+  score: number;
+  signal: 'BUY' | 'HOLD' | 'SELL';
+  reason: string;
+  news: StockNewsItem[];
+}
+
+export interface DashboardRecommendationItem {
+  stockCode: string;
+  stockName: string;
+  price: number;
+  changeRate: number;
+  aiScore: number;
+  reason: string;
+  marketType: 'DOMESTIC' | 'OVERSEAS';
+}
+
+export interface DashboardRecommendations {
+  recommended: DashboardRecommendationItem[];
+  avoided: DashboardRecommendationItem[];
+}
+
+/** GET /api/v1/stocks/{stockCode}/ai-analysis */
+export async function getStockAiAnalysis(stockCode: string): Promise<StockAiAnalysisResponse> {
+  return fetcher<StockAiAnalysisResponse>(`${API_BASE_URL}/api/v1/stocks/${stockCode}/ai-analysis`);
+}
+
+/** GET /api/v1/stocks/recommendations?market={market} */
+export async function getDashboardRecommendations(market: 'DOMESTIC' | 'OVERSEAS'): Promise<DashboardRecommendations> {
+  return fetcher<DashboardRecommendations>(`${API_BASE_URL}/api/v1/stocks/recommendations?market=${market}`);
 }

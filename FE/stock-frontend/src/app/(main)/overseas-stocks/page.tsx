@@ -53,16 +53,18 @@ export default async function OverseasStocksPage({
   return (
     <div className="min-h-screen bg-canvas text-ink">
       <main className="max-w-7xl mx-auto px-6 py-8">
-        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-8">
-          <div className="flex items-center gap-3 flex-wrap">
-            <ExchangeFilterTabs />
-            <OverseasSectorFilter />
+        <Suspense fallback={<div className="h-10 animate-pulse bg-surface-soft rounded-full w-full" />}>
+          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-8">
+            <div className="flex items-center gap-3 flex-wrap">
+              <ExchangeFilterTabs />
+              <OverseasSectorFilter />
+            </div>
+            <div className="flex items-center gap-3">
+              <SortSelect basePath="/overseas-stocks" />
+              <OverseasStockSearchBar />
+            </div>
           </div>
-          <div className="flex items-center gap-3">
-            <SortSelect basePath="/overseas-stocks" />
-            <OverseasStockSearchBar />
-          </div>
-        </div>
+        </Suspense>
 
         <Suspense
           fallback={

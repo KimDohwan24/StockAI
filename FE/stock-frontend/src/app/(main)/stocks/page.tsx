@@ -54,16 +54,18 @@ export default async function StocksPage({
   return (
     <div className="min-h-screen bg-canvas text-ink">
       <main className="max-w-7xl mx-auto px-6 py-8">
-        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-8">
-          <div className="flex items-center gap-3 flex-wrap">
-            <MarketTypeTabs />
-            <SectorFilter />
+        <Suspense fallback={<div className="h-10 animate-pulse bg-surface-soft rounded-full w-full" />}>
+          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-8">
+            <div className="flex items-center gap-3 flex-wrap">
+              <MarketTypeTabs />
+              <SectorFilter />
+            </div>
+            <div className="flex items-center gap-3">
+              <SortSelect basePath="/stocks" />
+              <StockSearchBar />
+            </div>
           </div>
-          <div className="flex items-center gap-3">
-            <SortSelect basePath="/stocks" />
-            <StockSearchBar />
-          </div>
-        </div>
+        </Suspense>
 
         <Suspense
           fallback={

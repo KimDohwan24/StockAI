@@ -6,6 +6,10 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
+import java.time.DayOfWeek;
+import java.time.LocalTime;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -24,8 +28,22 @@ public class StockMasterPriceUpdater {
         this.jdbcTemplate = jdbcTemplate;
     }
 
+    private boolean isMarketOpen() {
+        ZonedDateTime nowKst = ZonedDateTime.now(ZoneId.of("Asia/Seoul"));
+        DayOfWeek day = nowKst.getDayOfWeek();
+        if (day == DayOfWeek.SATURDAY || day == DayOfWeek.SUNDAY) {
+            return false;
+        }
+        LocalTime time = nowKst.toLocalTime();
+        return !time.isBefore(LocalTime.of(9, 0)) && !time.isAfter(LocalTime.of(15, 30));
+    }
+
     public void submitPriceUpdate(String stockCode, String currentPrice, String changeValue,
                                   String changeSign, String changeRate, String volume, String marketCap) {
+        if (!isMarketOpen()) {
+            log.trace("Market is closed. Skipping price update database flush for stock: {}", stockCode);
+            return;
+        }
         PriceUpdateEntry entry = new PriceUpdateEntry(currentPrice, changeValue, changeSign,
                 changeRate, volume, marketCap, LocalDateTime.now());
         pendingUpdates.put(stockCode, entry);

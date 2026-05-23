@@ -1,6 +1,9 @@
 # Environment
 .env
 
+# bat
+run-server.bat
+
 # Python
 __pycache__/
 *.py[cod]

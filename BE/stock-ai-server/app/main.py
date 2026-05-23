@@ -2,7 +2,7 @@ import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
-from app.api import health, analyze, recommend
+from app.api import health, analyze, recommend, news_api
 from app.core.config import settings
 from app.core.exceptions import BaseAppException, global_exception_handler, generic_exception_handler
 from app.infrastructure.redis_client import RedisClient
@@ -44,3 +44,4 @@ app.add_exception_handler(Exception, generic_exception_handler)
 app.include_router(health.router)
 app.include_router(analyze.router)
 app.include_router(recommend.router)
+app.include_router(news_api.router)

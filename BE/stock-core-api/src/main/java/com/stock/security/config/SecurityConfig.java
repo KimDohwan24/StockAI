@@ -79,6 +79,7 @@ public class SecurityConfig {
                 .requestMatchers(AntPathRequestMatcher.antMatcher("/api/trending/**")).permitAll()
                 .requestMatchers(AntPathRequestMatcher.antMatcher("/api/account/**")).permitAll()
                 .requestMatchers(AntPathRequestMatcher.antMatcher("/api/portfolio/**")).authenticated()
+                .requestMatchers(AntPathRequestMatcher.antMatcher("/api/v1/stocks/**")).permitAll()
                 .requestMatchers(AntPathRequestMatcher.antMatcher("/api/ws/**")).permitAll()
                 .requestMatchers(AntPathRequestMatcher.antMatcher("/ws/**")).permitAll()
                 .requestMatchers(AntPathRequestMatcher.antMatcher("/error")).permitAll()

@@ -65,6 +65,8 @@ interface StockChartProps {
   color?: string;
   height?: number;
   realtimePrice?: number;
+  sparkline?: boolean;
+  pureLine?: boolean;
 }
 
 function isCandleData(data: AreaPoint[] | CandlePoint[]): data is CandlePoint[] {
@@ -77,6 +79,8 @@ export default function StockChart({
   color = '#0064e0',
   height,
   realtimePrice,
+  sparkline = false,
+  pureLine = false,
 }: StockChartProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -100,32 +104,64 @@ export default function StockChart({
         return;
       }
 
-      const chart = createChart(chartContainerRef.current, {
-        layout: {
-          background: { type: ColorType.Solid, color: 'transparent' },
-          textColor: '#8595a4',
-        },
-        grid: {
-          vertLines: { visible: false },
-          horzLines: { color: '#f1f4f7' },
-        },
-        width: w,
-        height: h,
-        timeScale: {
-          visible: true,
-          timeVisible: type === 'candlestick',
-          secondsVisible: false,
-        },
-        rightPriceScale: {
-          visible: true,
-          borderVisible: false,
-        },
-        crosshair: {
-          mode: 1,
-        },
-        handleScroll: type === 'candlestick',
-        handleScale: type === 'candlestick',
-      });
+      const chartOptions = sparkline
+        ? {
+            layout: {
+              background: { type: ColorType.Solid, color: 'transparent' },
+            },
+            grid: {
+              vertLines: { visible: false },
+              horzLines: { visible: false },
+            },
+            width: w,
+            height: h,
+            timeScale: {
+              visible: false,
+              borderVisible: false,
+            },
+            rightPriceScale: {
+              visible: false,
+              borderVisible: false,
+            },
+            leftPriceScale: {
+              visible: false,
+              borderVisible: false,
+            },
+            crosshair: {
+              vertLine: { visible: false },
+              horzLine: { visible: false },
+            },
+            handleScroll: false,
+            handleScale: false,
+          }
+        : {
+            layout: {
+              background: { type: ColorType.Solid, color: 'transparent' },
+              textColor: '#8595a4',
+            },
+            grid: {
+              vertLines: { visible: false },
+              horzLines: { color: '#f1f4f7' },
+            },
+            width: w,
+            height: h,
+            timeScale: {
+              visible: true,
+              timeVisible: type === 'candlestick',
+              secondsVisible: false,
+            },
+            rightPriceScale: {
+              visible: true,
+              borderVisible: false,
+            },
+            crosshair: {
+              mode: 1,
+            },
+            handleScroll: type === 'candlestick',
+            handleScale: type === 'candlestick',
+          };
+
+      const chart = createChart(chartContainerRef.current, chartOptions);
 
       if (type === 'candlestick' && isCandleData(data)) {
         const series = addCandlestickSeriesCompat(chart, {
@@ -151,9 +187,11 @@ export default function StockChart({
       } else {
         const series = addAreaSeriesCompat(chart, {
           lineColor: color,
-          topColor: color + '33',
-          bottomColor: color + '00',
-          lineWidth: 2,
+          topColor: pureLine ? 'transparent' : color + '33',
+          bottomColor: pureLine ? 'transparent' : color + '00',
+          lineWidth: sparkline ? 1.5 : 2,
+          priceLineVisible: !sparkline,
+          lastValueVisible: !sparkline,
         });
         series.setData(data as AreaPoint[]);
         seriesRef.current = series as unknown as SeriesType;

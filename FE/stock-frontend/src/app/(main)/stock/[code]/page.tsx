@@ -16,7 +16,10 @@ import {
   MappedDailyCandle,
   MappedMinuteCandle,
   OrderResult,
+  getStockAiAnalysis,
 } from '@/lib/api';
+import AiDecisionGauge from '@/components/AiDecisionGauge';
+import NewsSection from '@/components/NewsSection';
 import {
   TrendingUp,
   TrendingDown,
@@ -268,6 +271,12 @@ export default function StockDetailPage() {
     { dedupingInterval: 30000, revalidateOnFocus: false, refreshInterval: 30000 }
   );
 
+  const { data: aiAnalysis, isLoading: aiLoading } = useSWR(
+    stockCode ? `detail-ai-analysis-${stockCode}` : null,
+    () => getStockAiAnalysis(stockCode),
+    { dedupingInterval: 30000, revalidateOnFocus: false, refreshInterval: 30000 }
+  );
+
   const { price: wsPrice } = useStockPriceStream(stockCode, swrPrice ?? null);
 
   const priceInfo = wsPrice ?? swrPrice ?? null;
@@ -479,14 +488,28 @@ export default function StockDetailPage() {
                 )}
               </div>
             </section>
+
+            {/* News Section */}
+            <section className="bg-white border border-hairline-soft rounded-[24px] p-8 shadow-sm">
+              <NewsSection
+                news={aiAnalysis?.news ?? []}
+                isLoading={aiLoading}
+              />
+            </section>
           </div>
 
           {/* Trade Panel Sidebar */}
-          <div className="lg:sticky lg:top-24 lg:self-start">
+          <div className="lg:sticky lg:top-24 lg:self-start space-y-6">
             <TradePanel
               stockCode={stockCode}
               priceInfo={priceInfo}
               isAuthenticated={isAuthenticated}
+            />
+            <AiDecisionGauge
+              score={aiAnalysis?.score ?? 0}
+              signal={aiAnalysis?.signal ?? 'HOLD'}
+              reason={aiAnalysis?.reason ?? 'AI 분석이 로딩 중이거나 사용할 수 없습니다.'}
+              isLoading={aiLoading}
             />
           </div>
         </div>

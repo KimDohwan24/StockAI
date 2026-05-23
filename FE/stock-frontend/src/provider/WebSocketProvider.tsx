@@ -18,18 +18,14 @@ const WebSocketActionsContext = createContext<WebSocketActionsValue | null>(null
 
 export function WebSocketProvider({ children }: { children: React.ReactNode }) {
   const isVisible = useVisibility();
-  const stateRef = useRef<WebSocketConnectionState>('disconnected');
-  const [, forceUpdate] = useState(0);
+  const [wsState, setWsState] = useState<WebSocketConnectionState>(() => wsManager.getState() || 'disconnected');
 
   useEffect(() => {
     const unsub = wsManager.onStateChange((state) => {
-      stateRef.current = state;
-      forceUpdate((n) => n + 1);
+      setWsState(state);
     });
 
     wsManager.connect();
-    stateRef.current = wsManager.getState();
-    forceUpdate((n) => n + 1);
 
     return () => {
       unsub();
@@ -69,7 +65,7 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
   );
 
   return (
-    <WebSocketStateContext.Provider value={stateRef.current}>
+    <WebSocketStateContext.Provider value={wsState}>
       <WebSocketActionsContext.Provider value={actions}>
         {children}
       </WebSocketActionsContext.Provider>

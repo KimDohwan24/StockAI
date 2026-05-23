@@ -22,6 +22,9 @@ import {
   MappedMinuteCandle,
   PortfolioResponse,
   HoldingResponse,
+  getDashboardRecommendations,
+  DashboardRecommendationItem,
+  DashboardRecommendations,
 } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { useVisibility } from '@/hooks/useVisibility';
@@ -59,10 +62,22 @@ interface RecommendedSnapshot extends StockSnapshot {
 }
 
 function toSparkline(minutes: MappedMinuteCandle[]): AreaPoint[] {
-  return minutes.map((m) => ({
-    time: Math.floor(new Date(m.time).getTime() / 1000) as Time,
-    value: m.close,
-  }));
+  const points: AreaPoint[] = [];
+  const seenTimes = new Set<number>();
+
+  for (const m of minutes) {
+    const parsedTime = Math.floor(new Date(m.time).getTime() / 1000);
+    if (isNaN(parsedTime) || m.close <= 0) continue;
+    if (!seenTimes.has(parsedTime)) {
+      seenTimes.add(parsedTime);
+      points.push({
+        time: parsedTime as Time,
+        value: m.close,
+      });
+    }
+  }
+
+  return points.sort((a, b) => (a.time as number) - (b.time as number));
 }
 
 function fmt(n: number): string {
@@ -170,6 +185,15 @@ function HeroSection({ data, isLoggedIn }: { data: StockSnapshot; isLoggedIn: bo
 
 function StockCard({ data }: { data: StockSnapshot }) {
   const { code, name, info, loading } = data;
+  const isVisible = useVisibility();
+
+  const { data: minutes } = useSWR(
+    isVisible && code ? `stock-minutes-${code}` : null,
+    () => getMinuteCandles(code),
+    { dedupingInterval: 15000 }
+  );
+
+  const sparkline = useMemo(() => (minutes ? toSparkline(minutes) : []), [minutes]);
   const displayName = name && name !== code ? name : (info?.stockName || code);
 
   if (loading || !info) {
@@ -192,34 +216,54 @@ function StockCard({ data }: { data: StockSnapshot }) {
   return (
     <Link
       href={`/stock/${code}`}
-      className="meta-card p-6 hover:shadow-lg transition-shadow cursor-pointer group block"
+      className="meta-card p-6 hover:shadow-lg transition-shadow cursor-pointer group flex flex-col justify-between h-full min-h-[220px] block"
     >
-      <div className="flex justify-between items-start mb-4">
-        <div>
-          <p className="text-sm text-steel font-medium mb-0.5">{code}</p>
-          <h4 className="font-bold text-lg group-hover:text-meta-blue transition-colors">{displayName}</h4>
+      <div>
+        <div className="flex justify-between items-start mb-4">
+          <div>
+            <p className="text-sm text-steel font-medium mb-0.5">{code}</p>
+            <h4 className="font-bold text-lg group-hover:text-meta-blue transition-colors">{displayName}</h4>
+          </div>
+          <button className="text-hairline hover:text-meta-blue transition-colors" onClick={(e) => e.preventDefault()}>
+            <Star className="w-5 h-5" />
+          </button>
         </div>
-        <button className="text-hairline hover:text-meta-blue transition-colors" onClick={(e) => e.preventDefault()}>
-          <Star className="w-5 h-5" />
-        </button>
+
+        <div>
+          <p className="text-xl font-bold">{fmt(info.price)}</p>
+          <div className={`flex items-center gap-1 text-sm font-bold ${colorClass}`}>
+            {info.sign === '3' ? (
+              <Minus className="w-4 h-4" />
+            ) : info.isUp ? (
+              <TrendingUp className="w-4 h-4" />
+            ) : (
+              <TrendingDown className="w-4 h-4" />
+            )}
+            <span>
+              {info.change >= 0 ? '+' : ''}
+              {fmt(info.change)} ({info.changeRate >= 0 ? '+' : ''}
+              {info.changeRate}%)
+            </span>
+          </div>
+        </div>
       </div>
 
-      <div>
-        <p className="text-xl font-bold">{fmt(info.price)}</p>
-        <div className={`flex items-center gap-1 text-sm font-bold ${colorClass}`}>
-          {info.sign === '3' ? (
-            <Minus className="w-4 h-4" />
-          ) : info.isUp ? (
-            <TrendingUp className="w-4 h-4" />
-          ) : (
-            <TrendingDown className="w-4 h-4" />
-          )}
-          <span>
-            {info.change >= 0 ? '+' : ''}
-            {fmt(info.change)} ({info.changeRate >= 0 ? '+' : ''}
-            {info.changeRate}%)
-          </span>
-        </div>
+      <div className="mt-5 h-[60px] w-full relative">
+        {sparkline.length > 0 ? (
+          <StockChart
+            data={sparkline}
+            type="area"
+            color={info.isUp ? '#e41e3f' : '#0064e0'}
+            height={60}
+            sparkline={true}
+            pureLine={true}
+            realtimePrice={info.price}
+          />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center bg-surface-soft/40 rounded-lg border border-hairline-soft/50">
+            <span className="text-[10px] text-steel">차트 로딩 중...</span>
+          </div>
+        )}
       </div>
     </Link>
   );
@@ -409,6 +453,176 @@ function OverseasRecommendedSection() {
   );
 }
 
+interface AiRecommendationsSectionProps {
+  data: DashboardRecommendations | undefined;
+  isLoading: boolean;
+}
+
+function AiRecommendationsSection({ data, isLoading }: AiRecommendationsSectionProps) {
+  if (isLoading) {
+    return (
+      <section className="mb-12">
+        <h3 className="text-2xl font-bold mb-6 text-ink">AI 오늘의 투자 추천</h3>
+        <div className="grid lg:grid-cols-2 gap-8">
+          <div className="space-y-4">
+            <div className="flex items-center gap-2 mb-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
+              <h4 className="font-bold text-lg text-ink">🔥 AI 오늘의 추천 종목</h4>
+            </div>
+            {[...Array(2)].map((_, i) => (
+              <div key={i} className="bg-white border border-hairline-soft rounded-[24px] p-6 space-y-4 animate-pulse">
+                <div className="flex justify-between">
+                  <div className="h-6 bg-surface-soft rounded w-1/3" />
+                  <div className="h-6 bg-surface-soft rounded-full w-14" />
+                </div>
+                <div className="h-5 bg-surface-soft rounded w-1/4" />
+                <div className="h-12 bg-surface-soft rounded-[12px] w-full" />
+              </div>
+            ))}
+          </div>
+          <div className="space-y-4">
+            <div className="flex items-center gap-2 mb-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-rose-500 animate-pulse" />
+              <h4 className="font-bold text-lg text-ink">⚠️ AI 오늘의 피해야 할 종목</h4>
+            </div>
+            {[...Array(2)].map((_, i) => (
+              <div key={i} className="bg-white border border-hairline-soft rounded-[24px] p-6 space-y-4 animate-pulse">
+                <div className="flex justify-between">
+                  <div className="h-6 bg-surface-soft rounded w-1/3" />
+                  <div className="h-6 bg-surface-soft rounded-full w-14" />
+                </div>
+                <div className="h-5 bg-surface-soft rounded w-1/4" />
+                <div className="h-12 bg-surface-soft rounded-[12px] w-full" />
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  const recommended = data?.recommended ?? [];
+  const avoided = data?.avoided ?? [];
+
+  if (recommended.length === 0 && avoided.length === 0) {
+    return (
+      <section className="mb-12 text-center py-16 bg-white border border-hairline-soft rounded-[32px] shadow-sm">
+        <p className="text-steel font-medium">분석된 AI 투자 추천/회피 종목 데이터가 없습니다.</p>
+      </section>
+    );
+  }
+
+  const getLinkHref = (item: DashboardRecommendationItem) => {
+    if (item.marketType === 'OVERSEAS') {
+      return `/overseas-stocks/${item.stockCode}?exchange=NASDAQ`;
+    }
+    return `/stock/${item.stockCode}`;
+  };
+
+  return (
+    <section className="mb-12">
+      <div className="mb-8">
+        <h3 className="text-2xl font-bold text-ink">AI 오늘의 투자 추천</h3>
+        <p className="text-sm text-steel mt-1">AI가 감성 지수와 가격 변동 모멘텀을 종합하여 매일 엄선합니다.</p>
+      </div>
+
+      <div className="grid lg:grid-cols-2 gap-8">
+        {/* Recommended Column */}
+        <div className="space-y-4">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
+            <h4 className="font-bold text-lg text-ink">🔥 AI 오늘의 추천 종목</h4>
+          </div>
+          {recommended.length === 0 ? (
+            <div className="bg-white border border-hairline-soft rounded-[24px] p-8 text-center text-steel shadow-sm">
+              추천 종목이 없습니다.
+            </div>
+          ) : (
+            recommended.map((item) => (
+              <Link
+                key={item.stockCode}
+                href={getLinkHref(item)}
+                className="bg-white border border-hairline-soft hover:border-emerald-200 rounded-[24px] p-6 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-300 group flex flex-col justify-between block min-h-[170px]"
+              >
+                <div>
+                  <div className="flex justify-between items-start mb-2">
+                    <div>
+                      <span className="text-[10px] text-steel font-medium tracking-wider">{item.stockCode}</span>
+                      <h5 className="font-bold text-lg group-hover:text-meta-blue transition-colors leading-snug">
+                        {item.stockName}
+                      </h5>
+                    </div>
+                    <span className="px-3 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-600 border border-emerald-100">
+                      매수 {item.aiScore > 0 ? `+${item.aiScore}` : item.aiScore}점
+                    </span>
+                  </div>
+
+                  <div className="flex items-baseline gap-2 mb-3">
+                    <span className="text-lg font-bold text-ink">{fmt(item.price)}원</span>
+                    <span className={`text-xs font-semibold ${item.changeRate >= 0 ? 'text-market-up' : 'text-market-down'}`}>
+                      {item.changeRate >= 0 ? '+' : ''}{item.changeRate.toFixed(2)}%
+                    </span>
+                  </div>
+                </div>
+
+                <div className="bg-emerald-50/25 border border-emerald-100/50 rounded-xl p-3.5 text-xs text-slate leading-relaxed">
+                  {item.reason}
+                </div>
+              </Link>
+            ))
+          )}
+        </div>
+
+        {/* Avoided Column */}
+        <div className="space-y-4">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="w-2.5 h-2.5 rounded-full bg-rose-500" />
+            <h4 className="font-bold text-lg text-ink">⚠️ AI 오늘의 피해야 할 종목</h4>
+          </div>
+          {avoided.length === 0 ? (
+            <div className="bg-white border border-hairline-soft rounded-[24px] p-8 text-center text-steel shadow-sm">
+              회피 종목이 없습니다.
+            </div>
+          ) : (
+            avoided.map((item) => (
+              <Link
+                key={item.stockCode}
+                href={getLinkHref(item)}
+                className="bg-white border border-hairline-soft hover:border-rose-200 rounded-[24px] p-6 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-300 group flex flex-col justify-between block min-h-[170px]"
+              >
+                <div>
+                  <div className="flex justify-between items-start mb-2">
+                    <div>
+                      <span className="text-[10px] text-steel font-medium tracking-wider">{item.stockCode}</span>
+                      <h5 className="font-bold text-lg group-hover:text-meta-blue transition-colors leading-snug">
+                        {item.stockName}
+                      </h5>
+                    </div>
+                    <span className="px-3 py-1 rounded-full text-xs font-bold bg-rose-50 text-rose-600 border border-rose-100">
+                      매도 {item.aiScore}점
+                    </span>
+                  </div>
+
+                  <div className="flex items-baseline gap-2 mb-3">
+                    <span className="text-lg font-bold text-ink">{fmt(item.price)}원</span>
+                    <span className={`text-xs font-semibold ${item.changeRate >= 0 ? 'text-market-up' : 'text-market-down'}`}>
+                      {item.changeRate >= 0 ? '+' : ''}{item.changeRate.toFixed(2)}%
+                    </span>
+                  </div>
+                </div>
+
+                <div className="bg-rose-50/25 border border-rose-100/50 rounded-xl p-3.5 text-xs text-slate leading-relaxed">
+                  {item.reason}
+                </div>
+              </Link>
+            ))
+          )}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 export default function Dashboard() {
   const { isAuthenticated } = useAuth();
   const [dashboardTab, setDashboardTab] = useState<'domestic' | 'overseas'>('domestic');
@@ -431,6 +645,12 @@ export default function Dashboard() {
   );
 
   const { hero, recommended } = useDashboardStocks(allDashboardCodes, HERO_CODE, RECOMMENDED_CODES, isVisible, initialPrices, pricesLoading);
+
+  const { data: aiRecommendations, isLoading: aiLoading } = useSWR(
+    isVisible ? `dashboard-ai-recommendations-${dashboardTab}` : null,
+    () => getDashboardRecommendations(dashboardTab === 'domestic' ? 'DOMESTIC' : 'OVERSEAS'),
+    { revalidateOnFocus: false, dedupingInterval: 30000, refreshInterval: 30000 }
+  );
 
   const { data: portfolio } = useSWR(
     isAuthenticated ? 'dashboard-portfolio' : null,
@@ -492,20 +712,7 @@ export default function Dashboard() {
               </>
             )}
 
-            <HeroSection data={hero} isLoggedIn={isAuthenticated} />
-
-            <section>
-              <div className="flex items-center justify-between mb-8">
-                <h3 className="text-2xl font-bold">인기 추천 종목</h3>
-                <Link href="/stocks" className="text-meta-blue font-bold text-sm hover:underline">전체보기</Link>
-              </div>
-
-              <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
-                {recommended.map((stock) => (
-                  <StockCard key={stock.code} data={stock} />
-                ))}
-              </div>
-            </section>
+            <AiRecommendationsSection data={aiRecommendations} isLoading={aiLoading} />
           </>
         )}
 
@@ -521,13 +728,7 @@ export default function Dashboard() {
               </section>
             )}
 
-            <section className="mb-12">
-              <div className="flex items-center justify-between mb-8">
-                <h3 className="text-2xl font-bold">인기 추천 종목</h3>
-                <Link href="/overseas-stocks" className="text-meta-blue font-bold text-sm hover:underline">전체보기</Link>
-              </div>
-              <OverseasRecommendedSection />
-            </section>
+            <AiRecommendationsSection data={aiRecommendations} isLoading={aiLoading} />
 
             {!isAuthenticated && (
               <div className="bg-white border border-hairline-soft rounded-meta-xl p-8 text-center text-steel text-sm">

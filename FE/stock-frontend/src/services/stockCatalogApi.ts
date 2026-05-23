@@ -23,10 +23,15 @@ export function extractInitialPricesFromCatalog(
     if (item.currentPrice == null) continue;
     const sign = item.changeSign ?? '3';
     const parsed = parseSign(sign);
+    const rawChange = parseFloat(item.change ?? '0') || 0;
+    const rawChangeRate = parseFloat(item.changeRate ?? '0') || 0;
+    const change = parsed.isDown ? -Math.abs(rawChange) : Math.abs(rawChange);
+    const changeRate = parsed.isDown ? -Math.abs(rawChangeRate) : Math.abs(rawChangeRate);
+
     prices[item.stockCode] = {
       price: parseFloat(item.currentPrice) || 0,
-      change: parseFloat(item.change ?? '0') || 0,
-      changeRate: parseFloat(item.changeRate ?? '0') || 0,
+      change,
+      changeRate,
       open: 0,
       high: 0,
       low: 0,
@@ -65,7 +70,18 @@ export async function getStocks(params: {
   if (params.marketType) sp.set('marketType', params.marketType);
   if (params.sector) sp.set('sector', params.sector);
   if (params.sign) sp.set('sign', params.sign);
-  if (params.sort) sp.set('sort', params.sort);
+  
+  if (params.sort) {
+    const [field, dir] = params.sort.includes(',') ? params.sort.split(',') : [params.sort, 'asc'];
+    let mappedSort = params.sort;
+    if (field === 'upperLimit') {
+      mappedSort = `changeRate,${dir}`;
+    } else if (field === 'lowerLimit') {
+      const mappedDir = dir === 'asc' ? 'desc' : 'asc';
+      mappedSort = `changeRate,${mappedDir}`;
+    }
+    sp.set('sort', mappedSort);
+  }
   const qs = sp.toString();
   return fetcher<StockCatalogWithPriceResponse>(`${API_BASE_URL}/api/stocks${qs ? `?${qs}` : ''}`);
 }

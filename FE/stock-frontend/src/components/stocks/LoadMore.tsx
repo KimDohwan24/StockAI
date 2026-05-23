@@ -14,9 +14,17 @@ export default function LoadMore({ onLoadMore, hasMore, isLoading }: LoadMorePro
   return (
     <div className="flex flex-col items-center gap-3 mt-8">
       <button
-        onClick={onLoadMore}
-        disabled={isLoading}
-        className="flex items-center gap-2 px-6 py-3 rounded-full border border-hairline-soft text-sm font-bold text-steel hover:border-ink hover:text-ink transition-colors disabled:opacity-50"
+        type="button"
+        onClick={(e) => {
+          e.preventDefault();
+          e.currentTarget.blur();
+          if (!isLoading) {
+            onLoadMore();
+          }
+        }}
+        className={`flex items-center gap-2 px-6 py-3 rounded-full border border-hairline-soft text-sm font-bold text-steel hover:border-ink hover:text-ink transition-colors cursor-pointer ${
+          isLoading ? 'opacity-50' : ''
+        }`}
       >
         {isLoading ? (
           <>

@@ -21,17 +21,13 @@ type SearchTab = 'domestic' | 'overseas';
 export default function Navbar() {
   const { isAuthenticated, clearAuth, user } = useAuth();
   const pathname = usePathname();
-  const [searchTab, setSearchTab] = useState<SearchTab>('domestic');
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   const isDomestic = pathname === '/stocks' || pathname.startsWith('/stock/');
   const isOverseas = pathname === '/overseas-stocks' || pathname.startsWith('/overseas-stocks/');
 
-  useEffect(() => {
-    if (isOverseas) setSearchTab('overseas');
-    else setSearchTab('domestic');
-  }, [isOverseas]);
+  const searchTab: SearchTab = isOverseas ? 'overseas' : 'domestic';
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -64,6 +60,7 @@ export default function Navbar() {
             >
               국내 주식
             </Link>
+            {/* 해외 주식 (추후 오픈 예정)
             <Link
               href="/overseas-stocks"
               className={`px-3 py-1.5 rounded-full text-xs font-bold transition-colors flex items-center gap-1 ${
@@ -75,10 +72,12 @@ export default function Navbar() {
               <Globe className="w-3 h-3" />
               해외 주식
             </Link>
+            */}
           </div>
           <div className="hidden md:block">
             <div className="relative w-96">
               <div className="flex items-center bg-surface-soft pl-2 pr-4 py-1 rounded-full">
+                {/* 해외 주식 (추후 오픈 예정)
                 <button
                   onClick={() => setSearchTab('domestic')}
                   className={`px-2.5 py-1 rounded-full text-[11px] font-bold transition-colors flex-shrink-0 ${
@@ -101,7 +100,9 @@ export default function Navbar() {
                   해외
                 </button>
                 <span className="w-px h-4 bg-hairline-soft mx-2 flex-shrink-0" />
-                {searchTab === 'domestic' ? <StockSearchBar inline /> : <OverseasStockSearchBar inline />}
+                */}
+                <StockSearchBar inline />
+
               </div>
             </div>
           </div>

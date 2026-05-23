@@ -58,4 +58,40 @@ public class AiServerClient {
                 .bodyToMono(AiRecommendationResponse.class)
                 .block();
     }
+
+    public Mono<com.stock.infrastructure.dto.ai.StockAiAnalysisResponse> getAiAnalysis(String ticker) {
+        log.debug("Calling AI analysis for ticker={}", ticker);
+        return aiServerWebClient
+                .get()
+                .uri(uriBuilder -> uriBuilder
+                        .path("/api/v1/recommend/analysis")
+                        .queryParam("ticker", ticker)
+                        .build())
+                .retrieve()
+                .onStatus(status -> status.isError(),
+                        clientResponse -> clientResponse.bodyToMono(String.class)
+                                .flatMap(body -> {
+                                    log.error("AI analysis API error for ticker={}: {}", ticker, body);
+                                    return Mono.error(new RuntimeException("AI analysis API error: " + body));
+                                }))
+                .bodyToMono(com.stock.infrastructure.dto.ai.StockAiAnalysisResponse.class);
+    }
+
+    public Mono<com.stock.infrastructure.dto.ai.DashboardRecommendationsResponse> getDashboardRecommendations(String market) {
+        log.debug("Calling AI dashboard recommendations for market={}", market);
+        return aiServerWebClient
+                .get()
+                .uri(uriBuilder -> uriBuilder
+                        .path("/api/v1/recommend/dashboard")
+                        .queryParam("market", market.toLowerCase())
+                        .build())
+                .retrieve()
+                .onStatus(status -> status.isError(),
+                        clientResponse -> clientResponse.bodyToMono(String.class)
+                                .flatMap(body -> {
+                                    log.error("AI dashboard API error for market={}: {}", market, body);
+                                    return Mono.error(new RuntimeException("AI dashboard API error: " + body));
+                                }))
+                .bodyToMono(com.stock.infrastructure.dto.ai.DashboardRecommendationsResponse.class);
+    }
 }

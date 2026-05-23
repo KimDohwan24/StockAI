@@ -7,9 +7,11 @@ from app.core.config import settings
 from app.services.sentiment_service import SentimentService
 from app.services.recommendation_service import RecommendationService
 from app.services.stock_mapper import StockMapper
+from app.services.news_service import NewsService
 
 redis_client: RedisClient = RedisClient(settings.REDIS_URL)
 _nlp_model: NLPModel | None = None
+_news_service: NewsService | None = None
 
 
 async def get_db() -> AsyncGenerator:
@@ -37,6 +39,13 @@ def get_sentiment_service() -> SentimentService:
 
 def get_stock_mapper() -> StockMapper:
     return StockMapper()
+
+
+def get_news_service() -> NewsService:
+    global _news_service
+    if _news_service is None:
+        _news_service = NewsService()
+    return _news_service
 
 
 def get_recommendation_service() -> RecommendationService:

@@ -26,6 +26,12 @@ public class User {
 
     private LocalDateTime createdAt = LocalDateTime.now();
 
+    @Column(name = "initial_balance", nullable = false)
+    private double initialBalance = 100000000.0;
+
+    @Column(name = "cash_balance", nullable = false)
+    private double cashBalance = 100000000.0;
+
     public enum Role {
         USER, ADMIN
     }
@@ -76,5 +82,21 @@ public class User {
 
     public void setCreatedAt(LocalDateTime createdAt) {
         this.createdAt = createdAt;
+    }
+
+    public double getInitialBalance() {
+        return initialBalance;
+    }
+
+    public void setInitialBalance(double initialBalance) {
+        this.initialBalance = initialBalance;
+    }
+
+    public double getCashBalance() {
+        return cashBalance;
+    }
+
+    public void setCashBalance(double cashBalance) {
+        this.cashBalance = cashBalance;
     }
 }

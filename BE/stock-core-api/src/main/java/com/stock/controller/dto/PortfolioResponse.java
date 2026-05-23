@@ -1,10 +1,12 @@
 package com.stock.controller.dto;
 
+import java.time.LocalDateTime;
+
 public record PortfolioResponse(
         Long id,
-        String ticker,
-        String stockName,
-        int quantity,
-        double avgPrice,
-        String exchangeCode
+        Long userId,
+        double initialBalance,
+        double cashBalance,
+        double totalAssetValue,
+        LocalDateTime createdAt
 ) {}

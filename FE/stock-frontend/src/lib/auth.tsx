@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useState, useCallback, ReactNode } from 'react';
+import { createContext, useContext, useState, useCallback, useEffect, ReactNode } from 'react';
 
 // TODO: XSS 방지를 위해 HttpOnly 쿠키 기반 JWT 저장 고려 (현재 localStorage)
 const TOKEN_KEY = 'stockai_token';
@@ -60,8 +60,6 @@ function loadInitialAuth(): { token: string | null; user: AuthUser | null } {
   }
 }
 
-const initial = loadInitialAuth();
-
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function useAuth(): AuthContextValue {
@@ -71,10 +69,10 @@ export function useAuth(): AuthContextValue {
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<AuthUser | null>(initial.user);
-  const [token, setToken] = useState<string | null>(initial.token);
+  const [user, setUser] = useState<AuthUser | null>(null);
+  const [token, setToken] = useState<string | null>(null);
   const isAuthenticated = !!token;
-  const [isLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [hasPortfolio, setHasPortfolio] = useState<boolean | null>(null);
 
   const setAuth = useCallback((newToken: string, newUser: AuthUser) => {
@@ -90,6 +88,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setToken(null);
     setUser(null);
     setHasPortfolio(null);
+  }, []);
+
+  useEffect(() => {
+    const initial = loadInitialAuth();
+    if (initial.token) {
+      setTimeout(() => {
+        setToken(initial.token);
+        setUser(initial.user);
+        setIsLoading(false);
+      }, 0);
+    } else {
+      setTimeout(() => {
+        setIsLoading(false);
+      }, 0);
+    }
   }, []);
 
   return (

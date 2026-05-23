@@ -1,13 +1,14 @@
 # AGENT.md - stock-frontend
 
 > AI 뉴스 기반 주식 추천 서비스의 **프론트엔드 웹 애플리케이션** (Next.js 16 App Router)
+> 이 폴더의 AGENT.md는 **FrontEnd** 전용임. BE에 관련되어서는 BE의 AGENT.md를 확인하라.
 
 ---
 
 ## 1. 프로젝트 개요
 
 - **역할:** 주식 대시보드, AI 추천 종목 표시, 뉴스 기반 감성 분석 결과 시각화
-- **통신:** Spring Boot Core API (`http://localhost:8080/api/v1`) 와 HTTP 통신
+- **통신:** Spring Boot Core API (`http://localhost:8080/api`) 와 HTTP 통신
 - **특징:** SEO 최적화(SSR), 실시간 주가 차트, 투자성향 기반 추천 UI
 
 ---
@@ -75,7 +76,7 @@ npm run lint       # ESLint 검사
 | 서비스 | 주소 | 설명 |
 |--------|------|------|
 | Next.js dev | `http://localhost:3000` | 프론트엔드 개발 서버 |
-| Core API | `http://localhost:8080/api/v1` | Spring Boot 메인 API |
+| Core API | `http://localhost:8080/api` | Spring Boot 메인 API |
 | AI Server | `http://localhost:8000` | FastAPI (직접 호출 지양) |
 
 ---

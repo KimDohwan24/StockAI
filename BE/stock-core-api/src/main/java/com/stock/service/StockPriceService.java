@@ -3,6 +3,7 @@ package com.stock.service;
 import com.stock.infrastructure.client.KisApiClient;
 import com.stock.infrastructure.dto.kis.DailyPriceItem;
 import com.stock.infrastructure.dto.kis.MinutePriceItem;
+import com.stock.infrastructure.dto.kis.OverseasDailyPriceItem;
 import com.stock.infrastructure.dto.kis.StockPriceResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.cache.annotation.Cacheable;
@@ -29,5 +30,11 @@ public class StockPriceService {
     @Cacheable(value = "stocks::minute", key = "#stockCode")
     public List<MinutePriceItem> getMinutePrices(String stockCode) {
         return kisApiClient.getMinutePrices(stockCode);
+    }
+
+    @Cacheable(value = "overseas::daily", key = "#ticker + '-' + #exchangeCode + '-' + #period + '-' + #startDate + '-' + #endDate")
+    public List<OverseasDailyPriceItem> getOverseasDailyPrices(String ticker, String exchangeCode,
+                                                                 String period, String startDate, String endDate) {
+        return kisApiClient.getOverseasDailyPrices(ticker, exchangeCode, period, startDate, endDate);
     }
 }

@@ -49,7 +49,11 @@ public class AuthService {
                 new UsernamePasswordAuthenticationToken(request.getEmail(), request.getPassword())
         );
 
-        String token = jwtTokenProvider.generateToken(authentication.getName());
+        String role = authentication.getAuthorities().stream()
+                .findFirst()
+                .map(auth -> auth.getAuthority().replace("ROLE_", ""))
+                .orElse("USER");
+        String token = jwtTokenProvider.generateToken(authentication.getName(), role);
         return new TokenResponse(token);
     }
 }

@@ -15,6 +15,7 @@ public class KisConfig {
     private String oauthUrl;
     private String appkey;
     private String appsecret;
+    private String websocketUrl;
     private Account account;
 
     @Getter
@@ -25,10 +26,16 @@ public class KisConfig {
     }
 
     public String getAccountNo() {
+        if (account == null) {
+            throw new IllegalStateException("KIS account configuration is missing");
+        }
         return account.getCano();
     }
 
     public String getAccountProductCode() {
+        if (account == null) {
+            throw new IllegalStateException("KIS account configuration is missing");
+        }
         return account.getAcntPrdtCd();
     }
 }

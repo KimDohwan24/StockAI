@@ -28,5 +28,9 @@ class Settings(BaseSettings):
     # Security
     INTERNAL_API_KEY: str | None = None
 
+    # Naver API Settings
+    NAVER_CLIENT_ID: str | None = None
+    NAVER_CLIENT_SECRET: str | None = None
+
 
 settings = Settings()

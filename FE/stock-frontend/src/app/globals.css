@@ -58,3 +58,22 @@ body {
 .meta-button-secondary {
   @apply bg-transparent text-ink border-2 border-ink px-7 py-3 rounded-meta-full font-bold text-sm transition-all;
 }
+
+@keyframes flash-bg-up {
+  0% { background-color: rgba(228, 30, 63, 0.15); }
+  100% { background-color: transparent; }
+}
+
+@keyframes flash-bg-down {
+  0% { background-color: rgba(0, 100, 224, 0.15); }
+  100% { background-color: transparent; }
+}
+
+.animate-flash-up {
+  animation: flash-bg-up 0.6s ease-out;
+}
+
+.animate-flash-down {
+  animation: flash-bg-down 0.6s ease-out;
+}
+

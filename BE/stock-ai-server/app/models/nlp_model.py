@@ -3,6 +3,8 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+NLP_SEED = 42
+
 
 class NLPModel:
     """
@@ -14,6 +16,7 @@ class NLPModel:
         self.model_name = model_name
         self.device = device
         self._loaded = False
+        random.seed(NLP_SEED)
         self._load_model()
 
     def _load_model(self):
@@ -31,7 +34,7 @@ class NLPModel:
         if not self._loaded:
             raise RuntimeError("Model is not loaded yet")
         # TODO: 실제 추론 로직
-        # 임시 랜덤 값 반환
+        # 임시 랜덤 값 반환 (시드 고정으로 재현 가능)
         score = round(random.uniform(-1.0, 1.0), 4)
         confidence = round(random.uniform(0.7, 1.0), 4)
         return score, confidence

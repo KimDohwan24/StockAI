@@ -5,8 +5,8 @@ import com.stock.infrastructure.dto.kis.KisTokenRequest;
 import com.stock.infrastructure.dto.kis.KisTokenResponse;
 import com.stock.infrastructure.dto.kis.KisWebSocketKeyRequest;
 import com.stock.infrastructure.dto.kis.KisWebSocketKeyResponse;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
@@ -18,22 +18,25 @@ import java.util.concurrent.ConcurrentHashMap;
 
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class KisAuthService {
 
     private static final String REDIS_TOKEN_KEY = "kis:access_token";
     private static final String REDIS_TOKEN_EXPIRE_KEY = "kis:access_token:expires_in";
+    private static final String REDIS_WS_KEY = "kis:websocket_approval_key";
+    private static final Duration WS_KEY_TTL = Duration.ofHours(23);
 
-    // Redis fallback: in-memory cache when Redis is unavailable
     private static final ConcurrentHashMap<String, String> localCache = new ConcurrentHashMap<>();
 
     private final KisConfig kisConfig;
     private final StringRedisTemplate redisTemplate;
+    private final WebClient oAuthWebClient;
 
-    private WebClient getOAuthClient() {
-        return WebClient.builder()
-                .baseUrl(kisConfig.getOauthUrl())
-                .build();
+    public KisAuthService(KisConfig kisConfig,
+                          StringRedisTemplate redisTemplate,
+                          @Qualifier("kisOAuthWebClient") WebClient oAuthWebClient) {
+        this.kisConfig = kisConfig;
+        this.redisTemplate = redisTemplate;
+        this.oAuthWebClient = oAuthWebClient;
     }
 
     private String getFromCache(String key) {
@@ -62,10 +65,7 @@ public class KisAuthService {
         }
     }
 
-    /**
-     * 접근토큰을 반환합니다. 캐시에 있으면 사용하고, 없으면 발급받습니다.
-     */
-    public String getAccessToken() {
+    public synchronized String getAccessToken() {
         String token = getFromCache(REDIS_TOKEN_KEY);
         if (token != null && !token.isEmpty()) {
             String expireStr = getFromCache(REDIS_TOKEN_EXPIRE_KEY);
@@ -79,20 +79,17 @@ public class KisAuthService {
                 return token;
             }
         }
-        return issueAccessToken();
+        return doIssueAccessToken();
     }
 
-    /**
-     * KIS OAuth 서버에서 접근토큰을 새로 발급받고 캐시에 저장합니다.
-     */
-    public String issueAccessToken() {
+    private String doIssueAccessToken() {
         log.info("Issuing new KIS access token...");
 
         KisTokenRequest request = new KisTokenRequest();
         request.setAppkey(kisConfig.getAppkey());
         request.setAppsecret(kisConfig.getAppsecret());
 
-        KisTokenResponse response = getOAuthClient()
+        KisTokenResponse response = oAuthWebClient
                 .post()
                 .uri("/oauth2/tokenP")
                 .contentType(MediaType.APPLICATION_JSON)
@@ -120,17 +117,24 @@ public class KisAuthService {
         return token;
     }
 
-    /**
-     * 실시간 (웹소켓) 접속키를 발급받습니다.
-     */
-    public String issueWebSocketKey() {
+    public String issueAccessToken() {
+        return doIssueAccessToken();
+    }
+
+    public synchronized String issueWebSocketKey() {
+        String cachedKey = getFromCache(REDIS_WS_KEY);
+        if (cachedKey != null && !cachedKey.isEmpty()) {
+            log.debug("Using cached KIS WebSocket approval key");
+            return cachedKey;
+        }
+
         log.info("Issuing KIS WebSocket approval key...");
 
         KisWebSocketKeyRequest request = new KisWebSocketKeyRequest();
         request.setAppkey(kisConfig.getAppkey());
         request.setSecretkey(kisConfig.getAppsecret());
 
-        KisWebSocketKeyResponse response = getOAuthClient()
+        KisWebSocketKeyResponse response = oAuthWebClient
                 .post()
                 .uri("/oauth2/Approval")
                 .contentType(MediaType.APPLICATION_JSON)
@@ -146,13 +150,11 @@ public class KisAuthService {
             throw new RuntimeException("KIS WebSocket key response is empty");
         }
 
-        log.info("KIS WebSocket approval key issued successfully");
+        setToCache(REDIS_WS_KEY, response.getApproval_key(), WS_KEY_TTL);
+        log.info("KIS WebSocket approval key issued and cached successfully");
         return response.getApproval_key();
     }
 
-    /**
-     * 강제로 토큰을 폐기하고 캐시에서 삭제합니다.
-     */
     public void revokeToken() {
         String token = getFromCache(REDIS_TOKEN_KEY);
         if (token == null || token.isEmpty()) {

@@ -5,12 +5,16 @@ import {
   createChart,
   ColorType,
   IChartApi,
+  ISeriesApi,
   AreaSeries,
   CandlestickSeries,
   Time,
+  CandlestickData,
+  SingleValueData,
 } from 'lightweight-charts';
 
-// lightweight-charts v5 compatible series creation
+type SeriesType = ISeriesApi<'Candlestick'> | ISeriesApi<'Area'>;
+
 function addAreaSeriesCompat(chart: IChartApi, options: object) {
   try {
     return chart.addSeries(AreaSeries, options);
@@ -25,6 +29,21 @@ function addCandlestickSeriesCompat(chart: IChartApi, options?: object) {
   } catch {
     return (chart as unknown as Record<string, (...args: unknown[]) => { setData: (d: unknown) => void }>).addCandlestickSeries(options);
   }
+}
+
+function isKoreanMarketOpen(): boolean {
+  const now = new Date();
+  const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
+  const kst = new Date(utc + (3600000 * 9));
+  
+  const day = kst.getDay();
+  if (day === 0 || day === 6) return false;
+  
+  const hours = kst.getHours();
+  const minutes = kst.getMinutes();
+  const currentTime = hours * 100 + minutes;
+  
+  return currentTime >= 900 && currentTime <= 1530;
 }
 
 export interface AreaPoint {
@@ -45,6 +64,9 @@ interface StockChartProps {
   type?: 'area' | 'candlestick';
   color?: string;
   height?: number;
+  realtimePrice?: number;
+  sparkline?: boolean;
+  pureLine?: boolean;
 }
 
 function isCandleData(data: AreaPoint[] | CandlePoint[]): data is CandlePoint[] {
@@ -56,9 +78,14 @@ export default function StockChart({
   type = 'area',
   color = '#0064e0',
   height,
+  realtimePrice,
+  sparkline = false,
+  pureLine = false,
 }: StockChartProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
+  const seriesRef = useRef<SeriesType | null>(null);
+  const lastCandleRef = useRef<CandlePoint | AreaPoint | null>(null);
   const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
@@ -72,38 +99,69 @@ export default function StockChart({
       const w = chartContainerRef.current.clientWidth;
       const h = height ?? chartContainerRef.current.clientHeight;
 
-      // 크기가 아직 확정되지 않았으면 다음 프레임에서 다시 시도
       if (w === 0 || h === 0) {
         requestAnimationFrame(initChart);
         return;
       }
 
-      const chart = createChart(chartContainerRef.current, {
-        layout: {
-          background: { type: ColorType.Solid, color: 'transparent' },
-          textColor: '#8595a4',
-        },
-        grid: {
-          vertLines: { visible: false },
-          horzLines: { color: '#f1f4f7' },
-        },
-        width: w,
-        height: h,
-        timeScale: {
-          visible: true,
-          timeVisible: type === 'candlestick',
-          secondsVisible: false,
-        },
-        rightPriceScale: {
-          visible: true,
-          borderVisible: false,
-        },
-        crosshair: {
-          mode: 1,
-        },
-        handleScroll: type === 'candlestick',
-        handleScale: type === 'candlestick',
-      });
+      const chartOptions = sparkline
+        ? {
+            layout: {
+              background: { type: ColorType.Solid, color: 'transparent' },
+            },
+            grid: {
+              vertLines: { visible: false },
+              horzLines: { visible: false },
+            },
+            width: w,
+            height: h,
+            timeScale: {
+              visible: false,
+              borderVisible: false,
+            },
+            rightPriceScale: {
+              visible: false,
+              borderVisible: false,
+            },
+            leftPriceScale: {
+              visible: false,
+              borderVisible: false,
+            },
+            crosshair: {
+              vertLine: { visible: false },
+              horzLine: { visible: false },
+            },
+            handleScroll: false,
+            handleScale: false,
+          }
+        : {
+            layout: {
+              background: { type: ColorType.Solid, color: 'transparent' },
+              textColor: '#8595a4',
+            },
+            grid: {
+              vertLines: { visible: false },
+              horzLines: { color: '#f1f4f7' },
+            },
+            width: w,
+            height: h,
+            timeScale: {
+              visible: true,
+              timeVisible: type === 'candlestick',
+              secondsVisible: false,
+            },
+            rightPriceScale: {
+              visible: true,
+              borderVisible: false,
+            },
+            crosshair: {
+              mode: 1,
+            },
+            handleScroll: type === 'candlestick',
+            handleScale: type === 'candlestick',
+          };
+
+      const chart = createChart(chartContainerRef.current, chartOptions);
 
       if (type === 'candlestick' && isCandleData(data)) {
         const series = addCandlestickSeriesCompat(chart, {
@@ -122,14 +180,24 @@ export default function StockChart({
           close: d.close,
         }));
         series.setData(mapped);
+        seriesRef.current = series as unknown as SeriesType;
+        if (data.length > 0) {
+          lastCandleRef.current = data[data.length - 1];
+        }
       } else {
         const series = addAreaSeriesCompat(chart, {
           lineColor: color,
-          topColor: color + '33',
-          bottomColor: color + '00',
-          lineWidth: 2,
+          topColor: pureLine ? 'transparent' : color + '33',
+          bottomColor: pureLine ? 'transparent' : color + '00',
+          lineWidth: sparkline ? 1.5 : 2,
+          priceLineVisible: !sparkline,
+          lastValueVisible: !sparkline,
         });
         series.setData(data as AreaPoint[]);
+        seriesRef.current = series as unknown as SeriesType;
+        if (data.length > 0) {
+          lastCandleRef.current = data[data.length - 1];
+        }
       }
 
       chart.timeScale().fitContent();
@@ -139,7 +207,6 @@ export default function StockChart({
 
     initChart();
 
-    // 컨테이너 자체 크기 변화를 감지해 차트 크기 동기화
     const resizeObserver = new ResizeObserver(() => {
       if (chartRef.current && chartContainerRef.current) {
         chartRef.current.applyOptions({
@@ -160,9 +227,44 @@ export default function StockChart({
         chartRef.current.remove();
         chartRef.current = null;
       }
+      seriesRef.current = null;
+      lastCandleRef.current = null;
       setIsReady(false);
     };
   }, [data, color, type, height]);
+
+  useEffect(() => {
+    if (realtimePrice == null || !seriesRef.current || !lastCandleRef.current) return;
+    if (!isKoreanMarketOpen()) return;
+
+    const last = lastCandleRef.current;
+    const time = (last as CandlePoint).time ?? (last as AreaPoint).time;
+
+    if (type === 'candlestick' && isCandleData([last as CandlePoint])) {
+      const candleLast = last as CandlePoint;
+      const updated: CandlestickData<Time> = {
+        time: candleLast.time as Time,
+        open: candleLast.open,
+        high: Math.max(candleLast.high, realtimePrice),
+        low: Math.min(candleLast.low, realtimePrice),
+        close: realtimePrice,
+      };
+      (seriesRef.current as unknown as ISeriesApi<'Candlestick'>).update(updated);
+      lastCandleRef.current = {
+        ...candleLast,
+        high: updated.high,
+        low: updated.low,
+        close: updated.close,
+      };
+    } else {
+      const updated: SingleValueData<Time> = {
+        time: time as Time,
+        value: realtimePrice,
+      };
+      (seriesRef.current as unknown as ISeriesApi<'Area'>).update(updated);
+      lastCandleRef.current = { time: time as Time, value: realtimePrice };
+    }
+  }, [realtimePrice, type]);
 
   return (
     <div

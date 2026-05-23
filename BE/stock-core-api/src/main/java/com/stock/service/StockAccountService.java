@@ -3,6 +3,7 @@ package com.stock.service;
 import com.stock.infrastructure.client.KisApiClient;
 import com.stock.infrastructure.dto.kis.*;
 import lombok.RequiredArgsConstructor;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -13,14 +14,17 @@ public class StockAccountService {
 
     private final KisApiClient kisApiClient;
 
+    @Cacheable(value = "accountBalance", key = "'balance'")
+    public BalanceResponse getBalanceFull() {
+        return kisApiClient.getBalance();
+    }
+
     public List<BalanceItem> getBalance() {
-        BalanceResponse response = kisApiClient.getBalance();
-        return response.getOutput1();
+        return getBalanceFull().getOutput1();
     }
 
     public BalanceSummary getBalanceSummary() {
-        BalanceResponse response = kisApiClient.getBalance();
-        return response.getOutput2();
+        return getBalanceFull().getOutput2();
     }
 
     public List<RealizedProfitItem> getRealizedProfit() {

@@ -1,0 +1,19 @@
+# Environment
+.env
+
+# bat
+run-server.bat
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# Virtual environment
+venv/
+.venv/
+
+# IDE
+.vscode/
+.idea/

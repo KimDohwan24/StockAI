@@ -8,7 +8,7 @@ import { getPortfolio, PortfolioResponse } from '@/lib/api';
 const AUTH_ONLY_PATHS = ['/onboarding'];
 
 export default function AuthGuard({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, isLoading: authLoading } = useAuth();
+  const { isAuthenticated, isLoading: authLoading, user } = useAuth();
   const router = useRouter();
   const [portfolio, setPortfolio] = useState<PortfolioResponse | null>(null);
   const [portfolioFetched, setPortfolioFetched] = useState(false);
@@ -37,10 +37,13 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (authLoading || !portfolioFetched || !isAuthenticated) return;
 
+    // Exempt ADMIN from having a portfolio redirect to onboarding
+    if (user?.role === 'ADMIN') return;
+
     if (!portfolio && !window.location.pathname.startsWith('/onboarding')) {
       router.replace('/onboarding');
     }
-  }, [authLoading, isAuthenticated, portfolio, portfolioFetched, router]);
+  }, [authLoading, isAuthenticated, portfolio, portfolioFetched, router, user]);
 
   const showSpinner = authLoading || (isAuthenticated && !portfolioFetched);
 

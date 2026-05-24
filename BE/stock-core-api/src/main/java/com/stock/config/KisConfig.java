@@ -17,6 +17,7 @@ public class KisConfig {
     private String appsecret;
     private String websocketUrl;
     private Account account;
+    private boolean mockOrderEnabled = true;
 
     @Getter
     @Setter

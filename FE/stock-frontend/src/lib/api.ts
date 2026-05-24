@@ -355,17 +355,33 @@ export async function getTrades(): Promise<TradeResponse[]> {
 // ═══════════════════════════════════════════════════════════
 
 export async function buyOrder(stockCode: string, quantity: number, price: number): Promise<OrderResult> {
-  return fetcher<OrderResult>(`${API_BASE_URL}/api/orders/buy`, {
+  const raw = await fetcher<any>(`${API_BASE_URL}/api/orders/buy`, {
     method: 'POST',
     body: JSON.stringify({ stockCode, quantity, price }),
   });
+  return {
+    stockCode,
+    stockName: raw.stockName || '',
+    side: 'BUY',
+    quantity,
+    price,
+    totalAmount: price * quantity,
+  };
 }
 
 export async function sellOrder(stockCode: string, quantity: number, price: number): Promise<OrderResult> {
-  return fetcher<OrderResult>(`${API_BASE_URL}/api/orders/sell`, {
+  const raw = await fetcher<any>(`${API_BASE_URL}/api/orders/sell`, {
     method: 'POST',
     body: JSON.stringify({ stockCode, quantity, price }),
   });
+  return {
+    stockCode,
+    stockName: raw.stockName || '',
+    side: 'SELL',
+    quantity,
+    price,
+    totalAmount: price * quantity,
+  };
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -412,4 +428,108 @@ export async function getStockAiAnalysis(stockCode: string): Promise<StockAiAnal
 /** GET /api/v1/stocks/recommendations?market={market} */
 export async function getDashboardRecommendations(market: 'DOMESTIC' | 'OVERSEAS'): Promise<DashboardRecommendations> {
   return fetcher<DashboardRecommendations>(`${API_BASE_URL}/api/v1/stocks/recommendations?market=${market}`);
+}
+
+// ═══════════════════════════════════════════════════════════
+//  User Profile APIs
+// ═══════════════════════════════════════════════════════════
+
+export interface UserProfileResponse {
+  id: number;
+  email: string;
+  name: string;
+  role: string;
+  createdAt: string;
+  initialBalance: number;
+  cashBalance: number;
+  aiTradingEnabled: boolean;
+  riskProfile: 'HIGH' | 'MEDIUM' | 'LOW';
+  aiTradingAllocationRatio: number;
+  mockOrderEnabled: boolean;
+}
+
+export interface OrderHistoryResponse {
+  id: number;
+  userId: number;
+  ticker: string;
+  stockName: string;
+  orderType: 'BUY' | 'SELL';
+  quantity: number;
+  price: number;
+  amount: number;
+  orderedBy: 'USER' | 'AI';
+  reason?: string;
+  createdAt: string;
+}
+
+export async function getUserProfile(): Promise<UserProfileResponse> {
+  return fetcher<UserProfileResponse>(`${API_BASE_URL}/api/user/me`);
+}
+
+export async function updateUserProfile(name: string, initialBalance: number, cashBalance: number): Promise<UserProfileResponse> {
+  return fetcher<UserProfileResponse>(`${API_BASE_URL}/api/user/me`, {
+    method: 'PUT',
+    body: JSON.stringify({ name, initialBalance, cashBalance }),
+  });
+}
+
+// AI 자동 매매 환경설정 API
+export async function updateAiConfig(enabled: boolean, riskProfile: string): Promise<UserProfileResponse> {
+  return fetcher<UserProfileResponse>(
+    `${API_BASE_URL}/api/user/me/ai-config?enabled=${enabled}&riskProfile=${riskProfile}`,
+    { method: 'PUT' }
+  );
+}
+
+// 주문 체결 내역 조회 API
+export async function getOrderHistory(): Promise<OrderHistoryResponse[]> {
+  return fetcher<OrderHistoryResponse[]>(`${API_BASE_URL}/api/orders/history`);
+}
+
+// ═══════════════════════════════════════════════════════════
+//  Admin APIs
+// ═══════════════════════════════════════════════════════════
+
+export interface AdminAiStatusResponse {
+  profile: UserProfileResponse;
+  portfolio: PortfolioResponse;
+  holdings: HoldingResponse[];
+  orderHistory: OrderHistoryResponse[];
+}
+
+export async function getAdminAiStatus(): Promise<AdminAiStatusResponse[]> {
+  return fetcher<AdminAiStatusResponse[]>(`${API_BASE_URL}/api/admin/ai-monitoring`);
+}
+
+export async function resetAiAccounts(): Promise<void> {
+  await fetcher<void>(`${API_BASE_URL}/api/admin/ai-monitoring/reset`, {
+    method: 'POST',
+  });
+}
+
+export async function updateMockOrderConfig(enabled: boolean): Promise<SystemConfigResponse> {
+  return fetcher<SystemConfigResponse>(`${API_BASE_URL}/api/admin/config/mock-order?enabled=${enabled}`, {
+    method: 'POST',
+  });
+}
+
+export async function toggleUserMockOrder(email: string, enabled: boolean): Promise<void> {
+  await fetcher<void>(`${API_BASE_URL}/api/admin/users/${email}/mock-order?enabled=${enabled}`, {
+    method: 'POST',
+  });
+}
+
+
+
+
+// ═══════════════════════════════════════════════════════════
+//  System Config APIs
+// ═══════════════════════════════════════════════════════════
+
+export interface SystemConfigResponse {
+  mockOrderEnabled: boolean;
+}
+
+export async function getSystemConfig(): Promise<SystemConfigResponse> {
+  return fetcher<SystemConfigResponse>(`${API_BASE_URL}/api/v1/stocks/config`);
 }

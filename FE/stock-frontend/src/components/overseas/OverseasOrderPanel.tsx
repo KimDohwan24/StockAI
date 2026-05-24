@@ -1,7 +1,8 @@
 'use client';
 
-import { useState } from 'react';
-import { buyOverseasStock, sellOverseasStock } from '@/services/overseasStockApi';
+import { useState, useMemo, useEffect, useCallback } from 'react';
+import useSWR, { mutate } from 'swr';
+import { buyOverseasStock, sellOverseasStock, getOverseasBalance } from '@/services/overseasStockApi';
 import { useAuth } from '@/lib/auth';
 import type { ExchangeCode } from '@/types/overseasStock';
 
@@ -25,6 +26,30 @@ export default function OverseasOrderPanel({
   const [orderLoading, setOrderLoading] = useState(false);
   const [orderMsg, setOrderMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
+  const { data: balanceData } = useSWR(
+    isAuthenticated ? 'overseas-balance' : null,
+    () => getOverseasBalance(),
+    { refreshInterval: 30000, dedupingInterval: 10000 }
+  );
+
+  const userHolding = useMemo(
+    () => balanceData?.output1?.find((h) => h.ticker === ticker && h.exchangeCode === exchangeCode) ?? null,
+    [balanceData, ticker, exchangeCode]
+  );
+
+  const clampQuantity = useCallback(
+    (val: number, currentSide: 'buy' | 'sell') => {
+      const maxQty = currentSide === 'sell' ? (userHolding?.quantity ?? 0) : Infinity;
+      const minQty = currentSide === 'sell' && (userHolding?.quantity ?? 0) === 0 ? 0 : 1;
+      return Math.max(minQty, Math.min(val, maxQty));
+    },
+    [userHolding]
+  );
+
+  useEffect(() => {
+    setQuantity((prev) => clampQuantity(prev, side));
+  }, [clampQuantity, side]);
+
   const totalAmount = price * quantity;
 
   const handleOrder = async () => {
@@ -41,6 +66,7 @@ export default function OverseasOrderPanel({
         type: 'success',
         text: `${side === 'buy' ? '매수' : '매도'} 완료: ${ticker} ${quantity}주 @ ${price.toLocaleString('en-US', { minimumFractionDigits: 2 })} ${currency}`,
       });
+      mutate('overseas-balance');
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : '주문에 실패했습니다.';
       setOrderMsg({ type: 'error', text: msg });
@@ -93,11 +119,22 @@ export default function OverseasOrderPanel({
         </button>
       </div>
 
+      {userHolding && (
+        <div className="bg-surface-soft rounded-meta-xl px-4 py-3 text-sm">
+          <span className="text-steel">보유: </span>
+          <span className="font-bold text-ink">{userHolding.quantity}주</span>
+          <span className="text-steel ml-2">평균단가: </span>
+          <span className="font-bold text-ink">
+            {userHolding.avgPrice.toLocaleString('en-US', { minimumFractionDigits: 2 })} {currency}
+          </span>
+        </div>
+      )}
+
       <div>
         <label className="block text-xs text-steel mb-1.5">수량</label>
         <div className="flex items-center gap-2">
           <button
-            onClick={() => setQuantity(Math.max(1, quantity - 1))}
+            onClick={() => setQuantity(clampQuantity(quantity - 1, side))}
             className="w-10 h-10 rounded-meta-xl bg-surface-soft text-ink font-bold hover:bg-hairline-soft transition-colors"
           >
             -
@@ -105,12 +142,15 @@ export default function OverseasOrderPanel({
           <input
             type="number"
             value={quantity}
-            onChange={(e) => setQuantity(Math.max(1, parseInt(e.target.value) || 1))}
-            min={1}
+            onChange={(e) => {
+              const val = parseInt(e.target.value) || 0;
+              setQuantity(clampQuantity(val, side));
+            }}
+            min={side === 'sell' && (userHolding?.quantity ?? 0) === 0 ? 0 : 1}
             className="flex-1 text-center px-4 py-2.5 border border-hairline-soft rounded-meta-xl text-sm font-bold focus:outline-none focus:border-meta-blue transition-colors"
           />
           <button
-            onClick={() => setQuantity(quantity + 1)}
+            onClick={() => setQuantity(clampQuantity(quantity + 1, side))}
             className="w-10 h-10 rounded-meta-xl bg-surface-soft text-ink font-bold hover:bg-hairline-soft transition-colors"
           >
             +

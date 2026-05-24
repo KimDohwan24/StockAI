@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useEffect, useRef } from 'react';
+import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import useSWR, { mutate } from 'swr';
@@ -17,6 +17,7 @@ import {
   MappedMinuteCandle,
   OrderResult,
   getStockAiAnalysis,
+  getSystemConfig,
 } from '@/lib/api';
 import AiDecisionGauge from '@/components/AiDecisionGauge';
 import NewsSection from '@/components/NewsSection';
@@ -103,6 +104,11 @@ function TradePanel({
   const [quantity, setQuantity] = useState(1);
   const [orderLoading, setOrderLoading] = useState(false);
   const [orderMsg, setOrderMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const { data: systemConfig } = useSWR('system-config', getSystemConfig, {
+    revalidateOnFocus: false,
+    dedupingInterval: 300000,
+  });
+  const mockOrderEnabled = systemConfig?.mockOrderEnabled ?? null;
 
   const currentPrice = priceInfo?.price ?? 0;
   const totalAmount = currentPrice * quantity;
@@ -118,6 +124,19 @@ function TradePanel({
     [holdings, stockCode]
   );
 
+  const clampQuantity = useCallback(
+    (val: number, currentSide: 'buy' | 'sell') => {
+      const maxQty = currentSide === 'sell' ? (userHolding?.quantity ?? 0) : Infinity;
+      const minQty = currentSide === 'sell' && (userHolding?.quantity ?? 0) === 0 ? 0 : 1;
+      return Math.max(minQty, Math.min(val, maxQty));
+    },
+    [userHolding]
+  );
+
+  useEffect(() => {
+    setQuantity((prev) => clampQuantity(prev, side));
+  }, [clampQuantity, side]);
+
   const handleOrder = async () => {
     if (quantity <= 0) return;
     setOrderLoading(true);
@@ -131,7 +150,7 @@ function TradePanel({
       }
       setOrderMsg({
         type: 'success',
-        text: `${result.side === 'BUY' ? '매수' : '매도'} 완료: ${result.stockName} ${result.quantity}주 @ ${fmt(result.price)}원`,
+        text: `${result.side === 'BUY' ? '매수' : '매도'} 완료: ${result.stockName || priceInfo?.stockName || stockCode} ${result.quantity}주 @ ${fmt(result.price)}원`,
       });
       mutate('dashboard-holdings');
     } catch (err: unknown) {
@@ -198,7 +217,7 @@ function TradePanel({
         <label className="block text-xs text-steel mb-1.5">수량</label>
         <div className="flex items-center gap-2">
           <button
-            onClick={() => setQuantity(Math.max(1, quantity - 1))}
+            onClick={() => setQuantity(clampQuantity(quantity - 1, side))}
             className="w-10 h-10 rounded-meta-xl bg-surface-soft text-ink font-bold hover:bg-hairline-soft transition-colors"
           >
             -
@@ -206,12 +225,15 @@ function TradePanel({
           <input
             type="number"
             value={quantity}
-            onChange={(e) => setQuantity(Math.max(1, parseInt(e.target.value) || 1))}
-            min={1}
+            onChange={(e) => {
+              const val = parseInt(e.target.value) || 0;
+              setQuantity(clampQuantity(val, side));
+            }}
+            min={side === 'sell' && (userHolding?.quantity ?? 0) === 0 ? 0 : 1}
             className="flex-1 text-center px-4 py-2.5 border border-hairline-soft rounded-meta-xl text-sm font-bold focus:outline-none focus:border-meta-blue transition-colors"
           />
           <button
-            onClick={() => setQuantity(quantity + 1)}
+            onClick={() => setQuantity(clampQuantity(quantity + 1, side))}
             className="w-10 h-10 rounded-meta-xl bg-surface-soft text-ink font-bold hover:bg-hairline-soft transition-colors"
           >
             +
@@ -239,6 +261,18 @@ function TradePanel({
           }`}
         >
           {orderMsg.text}
+        </div>
+      )}
+
+      {mockOrderEnabled !== null && (
+        <div className={`text-[11px] text-center px-3 py-1.5 rounded-meta-xl ${
+          mockOrderEnabled 
+            ? 'bg-meta-blue/5 text-meta-blue border border-meta-blue/15' 
+            : 'bg-market-up/5 text-market-up border border-market-up/15'
+        }`}>
+          {mockOrderEnabled
+            ? '⚡ 한국투자증권 모의투자 연동 (장 운영 시간 내 체결)'
+            : '🟢 로컬 가상 체결 모드 활성화 (24시간 즉시 체결)'}
         </div>
       )}
 

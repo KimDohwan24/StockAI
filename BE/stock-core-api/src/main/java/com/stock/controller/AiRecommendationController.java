@@ -2,6 +2,7 @@ package com.stock.controller;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.stock.config.KisConfig;
 import com.stock.infrastructure.client.AiServerClient;
 import com.stock.infrastructure.dto.ai.DashboardRecommendationsResponse;
 import com.stock.infrastructure.dto.ai.StockAiAnalysisResponse;
@@ -18,6 +19,7 @@ import java.time.Duration;
 import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
+import java.util.Map;
 import java.util.Optional;
 
 @Slf4j
@@ -29,6 +31,12 @@ public class AiRecommendationController {
     private final AiServerClient aiServerClient;
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
+    private final KisConfig kisConfig;
+
+    @GetMapping("/config")
+    public ResponseEntity<Map<String, Object>> getSystemConfig() {
+        return ResponseEntity.ok(Map.of("mockOrderEnabled", kisConfig.isMockOrderEnabled()));
+    }
 
     @GetMapping("/{stockCode}/ai-analysis")
     public Mono<ResponseEntity<StockAiAnalysisResponse>> getAiAnalysis(@PathVariable String stockCode) {

@@ -25,6 +25,10 @@ class Settings(BaseSettings):
     MODEL_NAME: str = "snunlp/KR-FinBert-SC"
     MODEL_DEVICE: str = "cpu"
 
+    # OpenRouter
+    OPENROUTER_API_KEY: str | None = None
+    OPENROUTER_MODEL: str = "google/gemma-2-9b-it:free"
+
     # Security
     INTERNAL_API_KEY: str | None = None
 

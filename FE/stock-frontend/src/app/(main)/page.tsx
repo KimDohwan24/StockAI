@@ -269,88 +269,7 @@ function StockCard({ data }: { data: StockSnapshot }) {
   );
 }
 
-function PortfolioSummary({ portfolio }: { portfolio: PortfolioResponse | null }) {
-  if (!portfolio) return null;
 
-  const totalReturn = portfolio.totalAssetValue - portfolio.initialBalance;
-  const totalReturnRate = portfolio.initialBalance > 0
-    ? ((totalReturn / portfolio.initialBalance) * 100).toFixed(2)
-    : '0.00';
-  const isPositive = totalReturn >= 0;
-
-  return (
-    <section className="mb-12">
-      <h3 className="text-2xl font-bold mb-6">내 포트폴리오</h3>
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white border border-hairline-soft rounded-meta-xl p-5">
-          <p className="text-xs text-steel mb-1">총 자산</p>
-          <p className="text-2xl font-bold text-ink">{fmt(portfolio.totalAssetValue)}원</p>
-        </div>
-        <div className="bg-white border border-hairline-soft rounded-meta-xl p-5">
-          <p className="text-xs text-steel mb-1">현금 잔액</p>
-          <p className="text-2xl font-bold text-ink">{fmt(portfolio.cashBalance)}원</p>
-        </div>
-        <div className="bg-white border border-hairline-soft rounded-meta-xl p-5">
-          <p className="text-xs text-steel mb-1">총 수익률</p>
-          <p className={`text-2xl font-bold ${isPositive ? 'text-market-up' : 'text-market-down'}`}>
-            {isPositive ? '+' : ''}{totalReturnRate}%
-          </p>
-        </div>
-        <div className="bg-white border border-hairline-soft rounded-meta-xl p-5">
-          <p className="text-xs text-steel mb-1">투자금액</p>
-          <p className="text-2xl font-bold text-ink">{fmt(portfolio.initialBalance)}원</p>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function HoldingsList({ holdings }: { holdings: HoldingResponse[] }) {
-  if (holdings.length === 0) return null;
-
-  return (
-    <section className="mb-12">
-      <div className="flex items-center justify-between mb-6">
-        <h3 className="text-2xl font-bold">보유 종목</h3>
-      </div>
-      <div className="bg-white border border-hairline-soft rounded-meta-xl overflow-hidden">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-hairline-soft text-steel text-xs">
-              <th className="text-left px-5 py-3 font-medium">종목</th>
-              <th className="text-right px-5 py-3 font-medium">보유수량</th>
-              <th className="text-right px-5 py-3 font-medium">평균단가</th>
-              <th className="text-right px-5 py-3 font-medium">현재가</th>
-              <th className="text-right px-5 py-3 font-medium">평가손익</th>
-              <th className="text-right px-5 py-3 font-medium">수익률</th>
-            </tr>
-          </thead>
-          <tbody>
-            {holdings.map((h) => (
-              <tr key={h.id} className="border-b border-hairline-soft last:border-b-0 hover:bg-surface-soft transition-colors">
-                <td className="px-5 py-4">
-                  <Link href={`/stock/${h.stockCode}`} className="hover:text-meta-blue transition-colors">
-                    <p className="font-bold text-ink">{h.stockName}</p>
-                    <p className="text-xs text-steel">{h.stockCode}</p>
-                  </Link>
-                </td>
-                <td className="text-right px-5 py-4 font-medium">{fmt(h.quantity)}</td>
-                <td className="text-right px-5 py-4">{fmt(h.avgPrice)}</td>
-                <td className="text-right px-5 py-4">{fmt(h.currentPrice)}</td>
-                <td className={`text-right px-5 py-4 font-medium ${h.profitLoss >= 0 ? 'text-market-up' : 'text-market-down'}`}>
-                  {h.profitLoss >= 0 ? '+' : ''}{fmt(h.profitLoss)}
-                </td>
-                <td className={`text-right px-5 py-4 font-bold ${h.profitRate >= 0 ? 'text-market-up' : 'text-market-down'}`}>
-                  {h.profitRate >= 0 ? '+' : ''}{h.profitRate.toFixed(2)}%
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </section>
-  );
-}
 
 function useDashboardStocks(
   allCodes: string[],
@@ -705,29 +624,12 @@ export default function Dashboard() {
 
         {dashboardTab === 'domestic' && (
           <>
-            {isAuthenticated && portfolio && (
-              <>
-                <PortfolioSummary portfolio={portfolio} />
-                <HoldingsList holdings={holdings ?? []} />
-              </>
-            )}
-
             <AiRecommendationsSection data={aiRecommendations} isLoading={aiLoading} />
           </>
         )}
 
         {dashboardTab === 'overseas' && (
           <>
-            {isAuthenticated && (
-              <section className="mb-12">
-                <div className="flex items-center justify-between mb-6">
-                  <h3 className="text-2xl font-bold">해외 보유 종목</h3>
-                  <Link href="/overseas-stocks" className="text-meta-blue font-bold text-sm hover:underline">전체 해외 종목 보기</Link>
-                </div>
-                <OverseasBalanceTable />
-              </section>
-            )}
-
             <AiRecommendationsSection data={aiRecommendations} isLoading={aiLoading} />
 
             {!isAuthenticated && (

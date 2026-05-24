@@ -11,8 +11,11 @@ import {
   LogOut,
   ChevronDown,
   Briefcase,
+  Cpu,
 } from 'lucide-react';
+import useSWR from 'swr';
 import { useAuth } from '@/lib/auth';
+import { getSystemConfig } from '@/lib/api';
 import StockSearchBar from '@/components/stocks/StockSearchBar';
 import OverseasStockSearchBar from '@/components/overseas/OverseasStockSearchBar';
 
@@ -23,6 +26,13 @@ export default function Navbar() {
   const pathname = usePathname();
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  const { data: systemConfig } = useSWR('system-config', getSystemConfig, {
+    revalidateOnFocus: false,
+    dedupingInterval: 300000,
+  });
+
+  const mockOrderEnabled = systemConfig?.mockOrderEnabled ?? null;
 
   const isDomestic = pathname === '/stocks' || pathname.startsWith('/stock/');
   const isOverseas = pathname === '/overseas-stocks' || pathname.startsWith('/overseas-stocks/');
@@ -36,6 +46,7 @@ export default function Navbar() {
       }
     }
     document.addEventListener('mousedown', handleClickOutside);
+
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
@@ -47,8 +58,23 @@ export default function Navbar() {
   return (
     <nav className="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-hairline-soft h-16">
       <div className="max-w-7xl mx-auto px-6 h-full flex items-center justify-between">
-        <div className="flex items-center gap-8">
-          <Link href="/" className="text-xl font-bold tracking-tight text-meta-blue">StockAI</Link>
+        <div className="flex items-center gap-4 md:gap-6">
+          <div className="flex items-center gap-3">
+            <Link href="/" className="text-xl font-bold tracking-tight text-meta-blue">StockAI</Link>
+            {mockOrderEnabled !== null && (
+              mockOrderEnabled ? (
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-meta-blue/10 text-meta-blue border border-meta-blue/20 whitespace-nowrap">
+                  <span className="w-1.5 h-1.5 rounded-full bg-meta-blue animate-pulse" />
+                  한투 모의투자 연동
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-market-up/10 text-market-up border border-market-up/20 whitespace-nowrap">
+                  <span className="w-1.5 h-1.5 rounded-full bg-market-up animate-pulse" />
+                  로컬 가상 모드 (24H)
+                </span>
+              )
+            )}
+          </div>
           <div className="hidden md:flex items-center gap-1">
             <Link
               href="/stocks"
@@ -125,13 +151,39 @@ export default function Navbar() {
               </button>
               {dropdownOpen && (
                 <div className="absolute right-0 top-full mt-1 bg-white border border-hairline-soft rounded-xl shadow-lg z-50 min-w-[180px] py-1">
+                  {user?.role === 'ADMIN' && (
+                    <Link
+                      href="/admin/ai-monitoring"
+                      className="flex items-center gap-2 w-full text-left px-4 py-2.5 hover:bg-surface-soft transition-colors text-sm font-bold text-meta-blue border-b border-hairline-soft"
+                      onClick={() => setDropdownOpen(false)}
+                    >
+                      <Cpu className="w-4 h-4 text-meta-blue" />
+                      AI 전체 모니터링
+                    </Link>
+                  )}
                   <Link
-                    href="/"
+                    href="/profile"
                     className="flex items-center gap-2 w-full text-left px-4 py-2.5 hover:bg-surface-soft transition-colors text-sm"
                     onClick={() => setDropdownOpen(false)}
                   >
                     <Briefcase className="w-4 h-4 text-steel" />
-                    내 포트폴리오
+                    마이페이지
+                  </Link>
+                  <Link
+                    href="/profile/ai-history"
+                    className="flex items-center gap-2 w-full text-left px-4 py-2.5 hover:bg-surface-soft transition-colors text-sm"
+                    onClick={() => setDropdownOpen(false)}
+                  >
+                    <Cpu className="w-4 h-4 text-indigo-500" />
+                    AI 투자 레포지토리
+                  </Link>
+                  <Link
+                    href="/profile/edit"
+                    className="flex items-center gap-2 w-full text-left px-4 py-2.5 hover:bg-surface-soft transition-colors text-sm border-b border-hairline-soft"
+                    onClick={() => setDropdownOpen(false)}
+                  >
+                    <User className="w-4 h-4 text-steel" />
+                    자산 설정
                   </Link>
                   <button
                     onClick={handleLogout}

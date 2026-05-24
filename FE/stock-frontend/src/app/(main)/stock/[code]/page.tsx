@@ -111,7 +111,6 @@ function TradePanel({
   const mockOrderEnabled = systemConfig?.mockOrderEnabled ?? null;
 
   const currentPrice = priceInfo?.price ?? 0;
-  const totalAmount = currentPrice * quantity;
   const { flashKey, flashClass } = usePriceFlash(currentPrice);
 
   const { data: holdings } = useSWR(
@@ -133,20 +132,20 @@ function TradePanel({
     [userHolding]
   );
 
-  useEffect(() => {
-    setQuantity((prev) => clampQuantity(prev, side));
-  }, [clampQuantity, side]);
+  const finalQuantity = useMemo(() => clampQuantity(quantity, side), [clampQuantity, quantity, side]);
+
+  const totalAmount = currentPrice * finalQuantity;
 
   const handleOrder = async () => {
-    if (quantity <= 0) return;
+    if (finalQuantity <= 0) return;
     setOrderLoading(true);
     setOrderMsg(null);
     try {
       let result: OrderResult;
       if (side === 'buy') {
-        result = await buyOrder(stockCode, quantity, priceInfo?.price ?? 0);
+        result = await buyOrder(stockCode, finalQuantity, priceInfo?.price ?? 0);
       } else {
-        result = await sellOrder(stockCode, quantity, priceInfo?.price ?? 0);
+        result = await sellOrder(stockCode, finalQuantity, priceInfo?.price ?? 0);
       }
       setOrderMsg({
         type: 'success',
@@ -217,14 +216,14 @@ function TradePanel({
         <label className="block text-xs text-steel mb-1.5">수량</label>
         <div className="flex items-center gap-2">
           <button
-            onClick={() => setQuantity(clampQuantity(quantity - 1, side))}
+            onClick={() => setQuantity(clampQuantity(finalQuantity - 1, side))}
             className="w-10 h-10 rounded-meta-xl bg-surface-soft text-ink font-bold hover:bg-hairline-soft transition-colors"
           >
             -
           </button>
           <input
             type="number"
-            value={quantity}
+            value={finalQuantity}
             onChange={(e) => {
               const val = parseInt(e.target.value) || 0;
               setQuantity(clampQuantity(val, side));
@@ -233,7 +232,7 @@ function TradePanel({
             className="flex-1 text-center px-4 py-2.5 border border-hairline-soft rounded-meta-xl text-sm font-bold focus:outline-none focus:border-meta-blue transition-colors"
           />
           <button
-            onClick={() => setQuantity(clampQuantity(quantity + 1, side))}
+            onClick={() => setQuantity(clampQuantity(finalQuantity + 1, side))}
             className="w-10 h-10 rounded-meta-xl bg-surface-soft text-ink font-bold hover:bg-hairline-soft transition-colors"
           >
             +
@@ -278,7 +277,7 @@ function TradePanel({
 
       <button
         onClick={handleOrder}
-        disabled={orderLoading || quantity <= 0 || currentPrice === 0}
+        disabled={orderLoading || finalQuantity <= 0 || currentPrice === 0}
         className={`w-full py-3 rounded-meta-full font-bold text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
           side === 'buy'
             ? 'bg-market-up text-white active:bg-red-700'

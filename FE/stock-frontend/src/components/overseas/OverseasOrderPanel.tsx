@@ -46,25 +46,23 @@ export default function OverseasOrderPanel({
     [userHolding]
   );
 
-  useEffect(() => {
-    setQuantity((prev) => clampQuantity(prev, side));
-  }, [clampQuantity, side]);
+  const finalQuantity = useMemo(() => clampQuantity(quantity, side), [clampQuantity, quantity, side]);
 
-  const totalAmount = price * quantity;
+  const totalAmount = price * finalQuantity;
 
   const handleOrder = async () => {
-    if (quantity <= 0) return;
+    if (finalQuantity <= 0) return;
     setOrderLoading(true);
     setOrderMsg(null);
     try {
       if (side === 'buy') {
-        await buyOverseasStock({ ticker, exchangeCode, quantity, price });
+        await buyOverseasStock({ ticker, exchangeCode, quantity: finalQuantity, price });
       } else {
-        await sellOverseasStock({ ticker, exchangeCode, quantity, price });
+        await sellOverseasStock({ ticker, exchangeCode, quantity: finalQuantity, price });
       }
       setOrderMsg({
         type: 'success',
-        text: `${side === 'buy' ? '매수' : '매도'} 완료: ${ticker} ${quantity}주 @ ${price.toLocaleString('en-US', { minimumFractionDigits: 2 })} ${currency}`,
+        text: `${side === 'buy' ? '매수' : '매도'} 완료: ${ticker} ${finalQuantity}주 @ ${price.toLocaleString('en-US', { minimumFractionDigits: 2 })} ${currency}`,
       });
       mutate('overseas-balance');
     } catch (err: unknown) {
@@ -134,14 +132,14 @@ export default function OverseasOrderPanel({
         <label className="block text-xs text-steel mb-1.5">수량</label>
         <div className="flex items-center gap-2">
           <button
-            onClick={() => setQuantity(clampQuantity(quantity - 1, side))}
+            onClick={() => setQuantity(clampQuantity(finalQuantity - 1, side))}
             className="w-10 h-10 rounded-meta-xl bg-surface-soft text-ink font-bold hover:bg-hairline-soft transition-colors"
           >
             -
           </button>
           <input
             type="number"
-            value={quantity}
+            value={finalQuantity}
             onChange={(e) => {
               const val = parseInt(e.target.value) || 0;
               setQuantity(clampQuantity(val, side));
@@ -150,7 +148,7 @@ export default function OverseasOrderPanel({
             className="flex-1 text-center px-4 py-2.5 border border-hairline-soft rounded-meta-xl text-sm font-bold focus:outline-none focus:border-meta-blue transition-colors"
           />
           <button
-            onClick={() => setQuantity(clampQuantity(quantity + 1, side))}
+            onClick={() => setQuantity(clampQuantity(finalQuantity + 1, side))}
             className="w-10 h-10 rounded-meta-xl bg-surface-soft text-ink font-bold hover:bg-hairline-soft transition-colors"
           >
             +
@@ -202,7 +200,7 @@ export default function OverseasOrderPanel({
 
       <button
         onClick={handleOrder}
-        disabled={orderLoading || quantity <= 0}
+        disabled={orderLoading || finalQuantity <= 0}
         className={`w-full py-3 rounded-full font-bold text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
           side === 'buy'
             ? 'bg-market-up text-white active:bg-red-700'

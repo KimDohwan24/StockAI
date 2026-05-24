@@ -84,8 +84,9 @@ export default function AdminAiMonitoringPage() {
       await resetAiAccounts();
       alert('AI 계정이 성공적으로 초기화되었습니다.');
       mutate();
-    } catch (err: any) {
-      alert(`초기화 실패: ${err.message || '알 수 없는 오류가 발생했습니다.'}`);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : '알 수 없는 오류';
+      alert(`초기화 실패: ${msg || '알 수 없는 오류가 발생했습니다.'}`);
     } finally {
       setResetting(false);
     }
@@ -105,8 +106,9 @@ export default function AdminAiMonitoringPage() {
       await toggleUserMockOrder(email, !currentEnabled);
       alert(`성공적으로 변경되었습니다.`);
       mutate();
-    } catch (err: any) {
-      alert(`변경 실패: ${err.message || '알 수 없는 오류가 발생했습니다.'}`);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : '알 수 없는 오류';
+      alert(`변경 실패: ${msg || '알 수 없는 오류가 발생했습니다.'}`);
     } finally {
       setTogglingUserMock(null);
     }
@@ -274,7 +276,7 @@ export default function AdminAiMonitoringPage() {
           ].map((tab) => (
             <button
               key={tab.id}
-              onClick={() => setActiveTab(tab.id as any)}
+              onClick={() => setActiveTab(tab.id as 'all' | 'high' | 'medium' | 'low')}
               className={`px-6 py-3.5 text-sm font-bold transition-all relative border-b-2 -mb-[2px] cursor-pointer flex items-center gap-2 ${
                 activeTab === tab.id
                   ? 'border-meta-blue text-meta-blue font-extrabold'

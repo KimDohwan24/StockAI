@@ -97,8 +97,9 @@ export default function ProfilePage() {
       mutate('user-profile', { ...profile, aiTradingEnabled: nextEnabled }, false);
       alert(`AI 자동 투자가 ${nextEnabled ? '활성화' : '비활성화'}되었습니다.`);
       mutate('user-profile');
-    } catch (err: any) {
-      alert('설정 저장 실패: ' + err.message);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : '알 수 없는 오류';
+      alert('설정 저장 실패: ' + msg);
     } finally {
       setIsUpdating(false);
     }
@@ -111,8 +112,9 @@ export default function ProfilePage() {
       await updateAiConfig(profile.aiTradingEnabled, newRisk);
       mutate('user-profile', { ...profile, riskProfile: newRisk }, false);
       mutate('user-profile');
-    } catch (err: any) {
-      alert('위험도 변경 실패: ' + err.message);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : '알 수 없는 오류';
+      alert('위험도 변경 실패: ' + msg);
     } finally {
       setIsUpdating(false);
     }

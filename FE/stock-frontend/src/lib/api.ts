@@ -355,7 +355,7 @@ export async function getTrades(): Promise<TradeResponse[]> {
 // ═══════════════════════════════════════════════════════════
 
 export async function buyOrder(stockCode: string, quantity: number, price: number): Promise<OrderResult> {
-  const raw = await fetcher<any>(`${API_BASE_URL}/api/orders/buy`, {
+  const raw = await fetcher<{ stockName?: string }>(`${API_BASE_URL}/api/orders/buy`, {
     method: 'POST',
     body: JSON.stringify({ stockCode, quantity, price }),
   });
@@ -370,7 +370,7 @@ export async function buyOrder(stockCode: string, quantity: number, price: numbe
 }
 
 export async function sellOrder(stockCode: string, quantity: number, price: number): Promise<OrderResult> {
-  const raw = await fetcher<any>(`${API_BASE_URL}/api/orders/sell`, {
+  const raw = await fetcher<{ stockName?: string }>(`${API_BASE_URL}/api/orders/sell`, {
     method: 'POST',
     body: JSON.stringify({ stockCode, quantity, price }),
   });

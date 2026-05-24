@@ -20,21 +20,12 @@ export default function ProfileEditPage() {
     { revalidateOnFocus: false, dedupingInterval: 60000 }
   );
 
-  const [name, setName] = useState('');
-  const [initialBalance, setInitialBalance] = useState<number | ''>('');
-  const [cashBalance, setCashBalance] = useState<number | ''>('');
+  const [name, setName] = useState(profile?.name || '');
+  const [initialBalance, setInitialBalance] = useState<number | ''>(profile?.initialBalance ?? '');
+  const [cashBalance, setCashBalance] = useState<number | ''>(profile?.cashBalance ?? '');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
-
-  // Sync state when profile is loaded
-  useEffect(() => {
-    if (profile) {
-      setName(profile.name);
-      setInitialBalance(profile.initialBalance);
-      setCashBalance(profile.cashBalance);
-    }
-  }, [profile]);
 
   // Redirect if not authenticated
   useEffect(() => {
@@ -77,8 +68,9 @@ export default function ProfileEditPage() {
       setTimeout(() => {
         router.push('/profile');
       }, 1500); // 1.5 seconds later, redirect
-    } catch (err: any) {
-      setErrorMsg(err.message || '정보 수정 중 오류가 발생했습니다. 다시 시도해 주세요.');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : '알 수 없는 오류';
+      setErrorMsg(msg || '정보 수정 중 오류가 발생했습니다. 다시 시도해 주세요.');
     } finally {
       setIsSubmitting(false);
     }

@@ -7,7 +7,7 @@ import { useAuth } from '@/lib/auth';
 import { toggleFavorite, getFavoriteStatus, addBasketItem, deleteBasketItem, getBasketItems } from '@/lib/api';
 import StockPriceBadge from './StockPriceBadge';
 import { useInView } from '@/hooks/useInView';
-import type { StockCatalogItem } from '@/types/stock';
+import type { StockCatalogItem, StockCatalogWithPrice } from '@/types/stock';
 import type { MappedStockPrice } from '@/lib/api';
 
 interface StockCatalogCardProps {
@@ -66,7 +66,7 @@ export default function StockCatalogCard({ item, price }: StockCatalogCardProps)
           mutate('user-basket-items');
         }
       } else {
-        const rawPrice = price?.price || (item as any).currentPrice;
+        const rawPrice = price?.price || (item as StockCatalogWithPrice).currentPrice;
         const targetPrice = rawPrice ? parseFloat(String(rawPrice)) : 0;
         const defaultWeight = 10;
         

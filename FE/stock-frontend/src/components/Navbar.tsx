@@ -51,7 +51,7 @@ export default function Navbar() {
 
   const [activeToast, setActiveToast] = useState<string | null>(null);
   const lastToastNotifIdRef = useRef<number | null>(null);
-  const [isFirstLoad, setIsFirstLoad] = useState(true);
+  const isFirstLoadRef = useRef(true);
 
   useEffect(() => {
     // Ensure light mode is active since dark mode button is removed
@@ -93,11 +93,11 @@ export default function Navbar() {
   useEffect(() => {
     if (notificationsLoading || !notifications) return;
 
-    if (isFirstLoad) {
+    if (isFirstLoadRef.current) {
       if (notifications.length > 0) {
         lastToastNotifIdRef.current = notifications[0].id;
       }
-      setIsFirstLoad(false);
+      isFirstLoadRef.current = false;
       return;
     }
 
@@ -112,7 +112,7 @@ export default function Navbar() {
         return () => clearTimeout(timer);
       }
     }
-  }, [notifications, notificationsLoading, isFirstLoad]);
+  }, [notifications, notificationsLoading]);
 
   const handleRemoveFavorite = async (e: React.MouseEvent, stockCode: string) => {
     e.preventDefault();

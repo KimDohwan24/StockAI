@@ -64,7 +64,9 @@ export default function BasketPage() {
           weight: item.weight,
         };
       });
-      setEditStates(initial);
+      setTimeout(() => {
+        setEditStates(initial);
+      }, 0);
     }
   }, [basketItems]);
 
@@ -162,9 +164,10 @@ export default function BasketPage() {
 
       const res = await runBacktest(reqItems);
       setBacktestResult(res);
-    } catch (err: any) {
+    } catch (err) {
       console.error('Backtest failed:', err);
-      setErrorMsg(err.message || '백테스팅 수행 중 오류가 발생했습니다.');
+      const message = err instanceof Error ? err.message : '백테스팅 수행 중 오류가 발생했습니다.';
+      setErrorMsg(message);
     } finally {
       setIsTesting(false);
     }

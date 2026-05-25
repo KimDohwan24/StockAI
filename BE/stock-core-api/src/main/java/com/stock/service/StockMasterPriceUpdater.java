@@ -58,11 +58,11 @@ public class StockMasterPriceUpdater {
         if (pendingUpdates.isEmpty()) return;
 
         Map<String, PriceUpdateEntry> batch = new ConcurrentHashMap<>();
-        for (Map.Entry<String, PriceUpdateEntry> entry : pendingUpdates.entrySet()) {
-            batch.put(entry.getKey(), entry.getValue());
-        }
-        for (String key : batch.keySet()) {
-            pendingUpdates.remove(key);
+        for (String key : pendingUpdates.keySet()) {
+            PriceUpdateEntry entry = pendingUpdates.remove(key);
+            if (entry != null) {
+                batch.put(key, entry);
+            }
         }
 
         if (batch.isEmpty()) return;

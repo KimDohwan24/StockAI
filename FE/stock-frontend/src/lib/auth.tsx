@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useState, useCallback, ReactNode } from 'react';
+import { createContext, useContext, useState, useCallback, useEffect, ReactNode } from 'react';
 
 // TODO: XSS 방지를 위해 HttpOnly 쿠키 기반 JWT 저장 고려 (현재 localStorage)
 const TOKEN_KEY = 'stockai_token';
@@ -9,6 +9,7 @@ const USER_KEY = 'stockai_user';
 export interface AuthUser {
   email: string;
   name: string;
+  role?: string;
 }
 
 interface AuthContextValue {
@@ -20,9 +21,10 @@ interface AuthContextValue {
   setAuth: (token: string, user: AuthUser) => void;
   clearAuth: () => void;
   setHasPortfolio: (v: boolean) => void;
+  updateUser: (updatedFields: Partial<AuthUser>) => void;
 }
 
-function parseJwt(token: string): { sub?: string; name?: string; email?: string; exp?: number } | null {
+function parseJwt(token: string): { sub?: string; name?: string; email?: string; exp?: number; role?: string } | null {
   try {
     const payload = token.split('.')[1];
     const base64 = payload.replace(/-/g, '+').replace(/_/g, '/');
@@ -52,15 +54,15 @@ function loadInitialAuth(): { token: string | null; user: AuthUser | null } {
       localStorage.removeItem(USER_KEY);
       return { token: null, user: null };
     }
-    return { token: storedToken, user: JSON.parse(storedUser) as AuthUser };
+    const parsedUser = JSON.parse(storedUser) as AuthUser;
+    const role = decoded?.role || parsedUser.role || 'USER';
+    return { token: storedToken, user: { ...parsedUser, role } };
   } catch {
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(USER_KEY);
     return { token: null, user: null };
   }
 }
-
-const initial = loadInitialAuth();
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
@@ -71,17 +73,20 @@ export function useAuth(): AuthContextValue {
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<AuthUser | null>(initial.user);
-  const [token, setToken] = useState<string | null>(initial.token);
+  const [user, setUser] = useState<AuthUser | null>(null);
+  const [token, setToken] = useState<string | null>(null);
   const isAuthenticated = !!token;
-  const [isLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [hasPortfolio, setHasPortfolio] = useState<boolean | null>(null);
 
   const setAuth = useCallback((newToken: string, newUser: AuthUser) => {
+    const decoded = parseJwt(newToken);
+    const role = decoded?.role || 'USER';
+    const userWithRole = { ...newUser, role };
     localStorage.setItem(TOKEN_KEY, newToken);
-    localStorage.setItem(USER_KEY, JSON.stringify(newUser));
+    localStorage.setItem(USER_KEY, JSON.stringify(userWithRole));
     setToken(newToken);
-    setUser(newUser);
+    setUser(userWithRole);
   }, []);
 
   const clearAuth = useCallback(() => {
@@ -92,8 +97,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setHasPortfolio(null);
   }, []);
 
+  const updateUser = useCallback((updatedFields: Partial<AuthUser>) => {
+    setUser((prev) => {
+      if (!prev) return null;
+      const nextUser = { ...prev, ...updatedFields };
+      localStorage.setItem(USER_KEY, JSON.stringify(nextUser));
+      return nextUser;
+    });
+  }, []);
+
+  useEffect(() => {
+    const initial = loadInitialAuth();
+    if (initial.token) {
+      setTimeout(() => {
+        setToken(initial.token);
+        setUser(initial.user);
+        setIsLoading(false);
+      }, 0);
+    } else {
+      setTimeout(() => {
+        setIsLoading(false);
+      }, 0);
+    }
+  }, []);
+
   return (
-    <AuthContext.Provider value={{ user, token, isAuthenticated, isLoading, hasPortfolio, setAuth, clearAuth, setHasPortfolio }}>
+    <AuthContext.Provider value={{ user, token, isAuthenticated, isLoading, hasPortfolio, setAuth, clearAuth, setHasPortfolio, updateUser }}>
       {children}
     </AuthContext.Provider>
   );

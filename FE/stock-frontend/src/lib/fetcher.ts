@@ -126,7 +126,11 @@ export async function fetcher<T>(url: string, init?: RequestInit, retries = 1): 
       throw new ApiError(res.status, `${msg}${hint}`);
     }
 
-    return res.json();
+    const text = await res.text();
+    if (!text) {
+      return {} as T;
+    }
+    return JSON.parse(text) as T;
   }
 
   throw lastErr!;

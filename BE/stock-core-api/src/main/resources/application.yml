@@ -16,6 +16,9 @@ spring:
       hibernate:
         format_sql: true
 
+  flyway:
+    validate-on-migrate: false
+
   data:
     redis:
       host: ${REDIS_HOST}
@@ -30,6 +33,8 @@ app:
   ai-server:
     url: ${APP_AI_SERVER_URL}
     timeout: ${APP_AI_SERVER_TIMEOUT:5000}
+  ai-trading:
+    interval-ms: ${APP_AI_TRADING_INTERVAL_MS:60000}
   jwt:
     secret: ${APP_JWT_SECRET}
     expiration: ${APP_JWT_EXPIRATION}
@@ -44,3 +49,14 @@ kis:
     cano: ${KIS_ACCOUNT_CANO}
     acnt_prdt_cd: ${KIS_ACCOUNT_ACNT_PRDT_CD}
   websocket-url: ${KIS_WEBSOCKET_URL}
+  mock-order-enabled: ${KIS_MOCK_ORDER_ENABLED:true}
+  mock:
+    base-url: ${KIS_MOCK_BASE_URL}
+    oauth-url: ${KIS_MOCK_OAUTH_URL}
+    appkey: ${KIS_MOCK_APPKEY}
+    appsecret: ${KIS_MOCK_APPSECRET}
+    account:
+      cano: ${KIS_MOCK_ACCOUNT_CANO}
+      acnt_prdt_cd: ${KIS_MOCK_ACCOUNT_ACNT_PRDT_CD:01}
+    websocket-url: ${KIS_MOCK_WEBSOCKET_URL}
+

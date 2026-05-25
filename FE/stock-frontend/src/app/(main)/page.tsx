@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
-import useSWR from 'swr';
+import useSWR, { mutate } from 'swr';
 import {
   TrendingUp,
   TrendingDown,
@@ -11,6 +11,7 @@ import {
   Star,
   Eye,
   Globe,
+  Sparkles,
 } from 'lucide-react';
 import StockChart, { AreaPoint } from '@/components/StockChart';
 import { Time } from 'lightweight-charts';
@@ -25,6 +26,8 @@ import {
   getDashboardRecommendations,
   DashboardRecommendationItem,
   DashboardRecommendations,
+  toggleFavorite,
+  getFavoriteStatus,
 } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { useVisibility } from '@/hooks/useVisibility';
@@ -34,6 +37,7 @@ import { getTrendingOverseasStocks, type OverseasTrendingResponse } from '@/serv
 import OverseasStockCard from '@/components/overseas/OverseasStockCard';
 import type { OverseasStockCatalogItem } from '@/types/overseasStock';
 import { getBatchStockPrices } from '@/services/stockCatalogApi';
+import { resolveStockName } from '@/lib/stockMap';
 
 const HERO_CODE = '005930';
 const RECOMMENDED_CODES = ['005930', '000660', '035420', '035720'];
@@ -97,31 +101,31 @@ function HeroSection({ data, isLoggedIn }: { data: StockSnapshot; isLoggedIn: bo
     : 'text-market-neutral';
 
   return (
-    <section className="mb-16">
-      <div className="bg-white border border-hairline-soft rounded-[32px] overflow-hidden shadow-[0_20px_40px_rgba(0,100,224,0.08)]">
+    <section className="mb-16 -tracking-[0.16px]">
+      <div className="bg-canvas border border-hairline-soft rounded-meta-xxxl overflow-hidden shadow-[0_20px_40px_rgba(0,100,224,0.08)]">
         <div className="grid lg:grid-cols-[1fr_400px] items-center">
-          <div className="p-12">
-            <div className="flex items-center gap-2 mb-6">
-              <span className="bg-market-up text-white text-[10px] font-bold px-2 py-1 rounded-meta-full uppercase tracking-wider">
+          <div className="p-8 md:p-12 space-y-6">
+            <div className="flex items-center gap-2.5">
+              <span className="bg-market-up text-white text-[10px] font-extrabold px-3 py-1 rounded-meta-full uppercase tracking-wider shadow-sm">
                 Today&apos;s Pick
               </span>
-              <span className="text-steel text-sm">AI 가 분석한 오늘의 강력 추천주</span>
+              <span className="text-steel text-sm font-semibold">AI 가 분석한 오늘의 강력 추천주</span>
             </div>
-            <h2 className="text-5xl font-bold mb-4 leading-tight">
+            <h2 className="text-4xl md:text-5xl font-black mb-4 leading-tight -tracking-[0.6px] text-ink">
               {`${STOCK_NAMES[HERO_CODE] || info?.stockName || HERO_CODE} (${HERO_CODE})`}
             </h2>
-            <p className="text-xl text-slate mb-8 max-w-lg">
+            <p className="text-lg text-slate leading-relaxed font-normal max-w-xl">
               반도체 사이클 회복과 AI 수요 증가로 인해 2분기 실적 개선이 기대됩니다. 현재
               구간에서 강력한 매수 신호가 감지되었습니다.
             </p>
-            <div className="flex gap-4">
+            <div className="flex flex-wrap gap-4 pt-2">
               <Link
                 href={isLoggedIn ? `/stock/${HERO_CODE}` : '/login'}
-                className="meta-button-buy inline-block text-center"
+                className="meta-button-buy inline-block text-center shadow-md active:scale-95 transition-all"
               >
                 지금 매수하기
               </Link>
-              <Link href={`/stock/${HERO_CODE}`} className="meta-button-secondary inline-block text-center">
+              <Link href={`/stock/${HERO_CODE}`} className="meta-button-secondary inline-block text-center active:scale-95 transition-all">
                 상세 분석 보기
               </Link>
             </div>
@@ -129,12 +133,12 @@ function HeroSection({ data, isLoggedIn }: { data: StockSnapshot; isLoggedIn: bo
 
           <div className="bg-surface-soft p-8 h-full flex flex-col justify-center border-l border-hairline-soft">
             {loading && (
-              <div className="flex items-center justify-center h-full text-steel text-sm">
+              <div className="flex items-center justify-center h-full text-steel text-sm font-bold">
                 데이터 로딩 중...
               </div>
             )}
             {!loading && error && (
-              <div className="flex items-center justify-center h-full text-market-down text-sm">
+              <div className="flex items-center justify-center h-full text-market-up text-sm font-bold">
                 {error}
               </div>
             )}
@@ -144,28 +148,28 @@ function HeroSection({ data, isLoggedIn }: { data: StockSnapshot; isLoggedIn: bo
               </div>
             )}
             {!loading && !error && info && (
-              <>
-                <div className="flex items-end justify-between mb-4">
-                  <div>
-                    <p className="text-sm text-steel mb-1">현재가</p>
-                    <p className={`text-3xl font-bold ${colorClass}`}>
+              <div className="space-y-6">
+                <div className="flex items-end justify-between">
+                  <div className="space-y-1">
+                    <p className="text-xs text-steel font-bold">현재가</p>
+                    <p className={`text-3xl font-black ${colorClass} -tracking-[0.4px]`}>
                       {fmt(info.price)}{' '}
-                      <span className="text-lg">
+                      <span className="text-lg font-bold">
                         {info.change >= 0 ? '+' : ''}
                         {fmt(info.change)}
                       </span>
                     </p>
-                    <p className={`text-sm font-bold mt-1 ${colorClass}`}>
+                    <p className={`text-sm font-extrabold ${colorClass}`}>
                       {info.changeRate >= 0 ? '+' : ''}
                       {info.changeRate}%
                     </p>
                   </div>
-                  <div className="text-right">
-                    <p className="text-sm text-steel mb-1">매칭 점수</p>
-                    <p className="text-3xl font-bold text-meta-blue">98%</p>
+                  <div className="text-right space-y-1">
+                    <p className="text-xs text-steel font-bold">매칭 점수</p>
+                    <p className="text-3xl font-black text-meta-blue">98%</p>
                   </div>
                 </div>
-                <div className="h-[200px] w-full bg-white rounded-meta-xxl p-4 border border-hairline-soft">
+                <div className="h-[200px] w-full bg-canvas rounded-meta-xxl p-4 border border-hairline-soft shadow-inner">
                   {sparkline.length > 0 ? (
                     <StockChart data={sparkline} type="area" color={info.isUp ? '#e41e3f' : '#0064e0'} />
                   ) : (
@@ -174,7 +178,7 @@ function HeroSection({ data, isLoggedIn }: { data: StockSnapshot; isLoggedIn: bo
                     </div>
                   )}
                 </div>
-              </>
+              </div>
             )}
           </div>
         </div>
@@ -186,6 +190,7 @@ function HeroSection({ data, isLoggedIn }: { data: StockSnapshot; isLoggedIn: bo
 function StockCard({ data }: { data: StockSnapshot }) {
   const { code, name, info, loading } = data;
   const isVisible = useVisibility();
+  const { isAuthenticated } = useAuth();
 
   const { data: minutes } = useSWR(
     isVisible && code ? `stock-minutes-${code}` : null,
@@ -193,12 +198,36 @@ function StockCard({ data }: { data: StockSnapshot }) {
     { dedupingInterval: 15000 }
   );
 
+  const { data: favoriteData, mutate: mutateFavorite } = useSWR(
+    isAuthenticated && code ? `favorite-status-${code}` : null,
+    () => getFavoriteStatus(code),
+    { revalidateOnFocus: false, dedupingInterval: 30000 }
+  );
+  const isFavorite = favoriteData?.favorited ?? false;
+  const [favoriteToggleLoading, setFavoriteToggleLoading] = useState(false);
+
+  const handleToggleFavorite = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!isAuthenticated) return;
+    setFavoriteToggleLoading(true);
+    try {
+      const res = await toggleFavorite(code);
+      mutateFavorite({ favorited: res.favorited }, false);
+      mutate('user-favorites');
+    } catch (err) {
+      console.error('Failed to toggle favorite:', err);
+    } finally {
+      setFavoriteToggleLoading(false);
+    }
+  };
+
   const sparkline = useMemo(() => (minutes ? toSparkline(minutes) : []), [minutes]);
-  const displayName = name && name !== code ? name : (info?.stockName || code);
+  const displayName = resolveStockName(code, name || info?.stockName);
 
   if (loading || !info) {
     return (
-      <div className="meta-card p-6 block animate-pulse">
+      <div className="bg-canvas border border-hairline-soft rounded-meta-xl p-6 block animate-pulse space-y-4">
         <div className="h-4 bg-surface-soft rounded w-1/3 mb-2" />
         <div className="h-6 bg-surface-soft rounded w-2/3 mb-4" />
         <div className="h-8 bg-surface-soft rounded w-1/2" />
@@ -216,22 +245,35 @@ function StockCard({ data }: { data: StockSnapshot }) {
   return (
     <Link
       href={`/stock/${code}`}
-      className="meta-card p-6 hover:shadow-lg transition-shadow cursor-pointer group flex flex-col justify-between h-full min-h-[220px] block"
+      className="bg-canvas border border-hairline-soft hover:border-hairline rounded-meta-xl p-6 hover:shadow-md transition-all duration-300 cursor-pointer group flex flex-col justify-between h-full min-h-[220px] -tracking-[0.14px] block"
     >
       <div>
         <div className="flex justify-between items-start mb-4">
           <div>
-            <p className="text-sm text-steel font-medium mb-0.5">{code}</p>
-            <h4 className="font-bold text-lg group-hover:text-meta-blue transition-colors">{displayName}</h4>
+            <p className="text-xs text-steel font-bold mb-0.5">{code}</p>
+            <h4 className="font-extrabold text-lg text-ink group-hover:text-meta-blue transition-colors leading-snug">{displayName}</h4>
           </div>
-          <button className="text-hairline hover:text-meta-blue transition-colors" onClick={(e) => e.preventDefault()}>
-            <Star className="w-5 h-5" />
-          </button>
+          {isAuthenticated && (
+            <button
+              onClick={handleToggleFavorite}
+              disabled={favoriteToggleLoading}
+              className="p-1 rounded-full hover:bg-surface-soft transition-colors cursor-pointer group"
+              title={isFavorite ? '즐겨찾기 해제' : '즐겨찾기 추가'}
+            >
+              <Star
+                className={`w-5 h-5 transition-all duration-300 ${
+                  isFavorite
+                    ? 'text-yellow-500 fill-yellow-500 scale-110'
+                    : 'text-steel group-hover:text-yellow-500 group-hover:scale-105'
+                }`}
+              />
+            </button>
+          )}
         </div>
 
         <div>
-          <p className="text-xl font-bold">{fmt(info.price)}</p>
-          <div className={`flex items-center gap-1 text-sm font-bold ${colorClass}`}>
+          <p className="text-2xl font-black text-ink">{fmt(info.price)}</p>
+          <div className={`flex items-center gap-1 text-sm font-extrabold ${colorClass}`}>
             {info.sign === '3' ? (
               <Minus className="w-4 h-4" />
             ) : info.isUp ? (
@@ -260,8 +302,8 @@ function StockCard({ data }: { data: StockSnapshot }) {
             realtimePrice={info.price}
           />
         ) : (
-          <div className="w-full h-full flex items-center justify-center bg-surface-soft/40 rounded-lg border border-hairline-soft/50">
-            <span className="text-[10px] text-steel">차트 로딩 중...</span>
+          <div className="w-full h-full flex items-center justify-center bg-surface-soft/40 rounded-meta-xl border border-hairline-soft/50">
+            <span className="text-[10px] text-steel font-bold">차트 로딩 중...</span>
           </div>
         )}
       </div>
@@ -269,88 +311,7 @@ function StockCard({ data }: { data: StockSnapshot }) {
   );
 }
 
-function PortfolioSummary({ portfolio }: { portfolio: PortfolioResponse | null }) {
-  if (!portfolio) return null;
 
-  const totalReturn = portfolio.totalAssetValue - portfolio.initialBalance;
-  const totalReturnRate = portfolio.initialBalance > 0
-    ? ((totalReturn / portfolio.initialBalance) * 100).toFixed(2)
-    : '0.00';
-  const isPositive = totalReturn >= 0;
-
-  return (
-    <section className="mb-12">
-      <h3 className="text-2xl font-bold mb-6">내 포트폴리오</h3>
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white border border-hairline-soft rounded-meta-xl p-5">
-          <p className="text-xs text-steel mb-1">총 자산</p>
-          <p className="text-2xl font-bold text-ink">{fmt(portfolio.totalAssetValue)}원</p>
-        </div>
-        <div className="bg-white border border-hairline-soft rounded-meta-xl p-5">
-          <p className="text-xs text-steel mb-1">현금 잔액</p>
-          <p className="text-2xl font-bold text-ink">{fmt(portfolio.cashBalance)}원</p>
-        </div>
-        <div className="bg-white border border-hairline-soft rounded-meta-xl p-5">
-          <p className="text-xs text-steel mb-1">총 수익률</p>
-          <p className={`text-2xl font-bold ${isPositive ? 'text-market-up' : 'text-market-down'}`}>
-            {isPositive ? '+' : ''}{totalReturnRate}%
-          </p>
-        </div>
-        <div className="bg-white border border-hairline-soft rounded-meta-xl p-5">
-          <p className="text-xs text-steel mb-1">투자금액</p>
-          <p className="text-2xl font-bold text-ink">{fmt(portfolio.initialBalance)}원</p>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function HoldingsList({ holdings }: { holdings: HoldingResponse[] }) {
-  if (holdings.length === 0) return null;
-
-  return (
-    <section className="mb-12">
-      <div className="flex items-center justify-between mb-6">
-        <h3 className="text-2xl font-bold">보유 종목</h3>
-      </div>
-      <div className="bg-white border border-hairline-soft rounded-meta-xl overflow-hidden">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-hairline-soft text-steel text-xs">
-              <th className="text-left px-5 py-3 font-medium">종목</th>
-              <th className="text-right px-5 py-3 font-medium">보유수량</th>
-              <th className="text-right px-5 py-3 font-medium">평균단가</th>
-              <th className="text-right px-5 py-3 font-medium">현재가</th>
-              <th className="text-right px-5 py-3 font-medium">평가손익</th>
-              <th className="text-right px-5 py-3 font-medium">수익률</th>
-            </tr>
-          </thead>
-          <tbody>
-            {holdings.map((h) => (
-              <tr key={h.id} className="border-b border-hairline-soft last:border-b-0 hover:bg-surface-soft transition-colors">
-                <td className="px-5 py-4">
-                  <Link href={`/stock/${h.stockCode}`} className="hover:text-meta-blue transition-colors">
-                    <p className="font-bold text-ink">{h.stockName}</p>
-                    <p className="text-xs text-steel">{h.stockCode}</p>
-                  </Link>
-                </td>
-                <td className="text-right px-5 py-4 font-medium">{fmt(h.quantity)}</td>
-                <td className="text-right px-5 py-4">{fmt(h.avgPrice)}</td>
-                <td className="text-right px-5 py-4">{fmt(h.currentPrice)}</td>
-                <td className={`text-right px-5 py-4 font-medium ${h.profitLoss >= 0 ? 'text-market-up' : 'text-market-down'}`}>
-                  {h.profitLoss >= 0 ? '+' : ''}{fmt(h.profitLoss)}
-                </td>
-                <td className={`text-right px-5 py-4 font-bold ${h.profitRate >= 0 ? 'text-market-up' : 'text-market-down'}`}>
-                  {h.profitRate >= 0 ? '+' : ''}{h.profitRate.toFixed(2)}%
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </section>
-  );
-}
 
 function useDashboardStocks(
   allCodes: string[],
@@ -461,38 +422,41 @@ interface AiRecommendationsSectionProps {
 function AiRecommendationsSection({ data, isLoading }: AiRecommendationsSectionProps) {
   if (isLoading) {
     return (
-      <section className="mb-12">
-        <h3 className="text-2xl font-bold mb-6 text-ink">AI 오늘의 투자 추천</h3>
+      <section className="mb-12 -tracking-[0.16px]">
+        <div className="mb-8">
+          <h3 className="text-2xl font-extrabold text-ink -tracking-[0.4px]">AI 오늘의 투자 추천</h3>
+          <p className="text-sm text-steel mt-1">AI가 감성 지수와 가격 변동 모멘텀을 종합하여 매일 엄선합니다.</p>
+        </div>
         <div className="grid lg:grid-cols-2 gap-8">
           <div className="space-y-4">
             <div className="flex items-center gap-2 mb-2">
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
-              <h4 className="font-bold text-lg text-ink">🔥 AI 오늘의 추천 종목</h4>
+              <span className="w-2 h-2 rounded-full bg-[#31a24c] animate-pulse" />
+              <h4 className="font-extrabold text-lg text-ink">🔥 AI 오늘의 추천 종목</h4>
             </div>
             {[...Array(2)].map((_, i) => (
-              <div key={i} className="bg-white border border-hairline-soft rounded-[24px] p-6 space-y-4 animate-pulse">
+              <div key={i} className="bg-canvas border border-hairline-soft rounded-meta-xxl p-6 space-y-4 animate-pulse shadow-sm">
                 <div className="flex justify-between">
                   <div className="h-6 bg-surface-soft rounded w-1/3" />
-                  <div className="h-6 bg-surface-soft rounded-full w-14" />
+                  <div className="h-6 bg-surface-soft rounded-meta-full w-14" />
                 </div>
                 <div className="h-5 bg-surface-soft rounded w-1/4" />
-                <div className="h-12 bg-surface-soft rounded-[12px] w-full" />
+                <div className="h-12 bg-surface-soft rounded-meta-xl w-full" />
               </div>
             ))}
           </div>
           <div className="space-y-4">
             <div className="flex items-center gap-2 mb-2">
-              <span className="w-2.5 h-2.5 rounded-full bg-rose-500 animate-pulse" />
-              <h4 className="font-bold text-lg text-ink">⚠️ AI 오늘의 피해야 할 종목</h4>
+              <span className="w-2 h-2 rounded-full bg-market-up animate-pulse" />
+              <h4 className="font-extrabold text-lg text-ink">⚠️ AI 오늘의 피해야 할 종목</h4>
             </div>
             {[...Array(2)].map((_, i) => (
-              <div key={i} className="bg-white border border-hairline-soft rounded-[24px] p-6 space-y-4 animate-pulse">
+              <div key={i} className="bg-canvas border border-hairline-soft rounded-meta-xxl p-6 space-y-4 animate-pulse shadow-sm">
                 <div className="flex justify-between">
                   <div className="h-6 bg-surface-soft rounded w-1/3" />
-                  <div className="h-6 bg-surface-soft rounded-full w-14" />
+                  <div className="h-6 bg-surface-soft rounded-meta-full w-14" />
                 </div>
                 <div className="h-5 bg-surface-soft rounded w-1/4" />
-                <div className="h-12 bg-surface-soft rounded-[12px] w-full" />
+                <div className="h-12 bg-surface-soft rounded-meta-xl w-full" />
               </div>
             ))}
           </div>
@@ -506,8 +470,8 @@ function AiRecommendationsSection({ data, isLoading }: AiRecommendationsSectionP
 
   if (recommended.length === 0 && avoided.length === 0) {
     return (
-      <section className="mb-12 text-center py-16 bg-white border border-hairline-soft rounded-[32px] shadow-sm">
-        <p className="text-steel font-medium">분석된 AI 투자 추천/회피 종목 데이터가 없습니다.</p>
+      <section className="mb-12 text-center py-16 bg-canvas border border-hairline-soft rounded-meta-xxxl shadow-sm">
+        <p className="text-steel font-bold">분석된 AI 투자 추천/회피 종목 데이터가 없습니다.</p>
       </section>
     );
   }
@@ -520,9 +484,9 @@ function AiRecommendationsSection({ data, isLoading }: AiRecommendationsSectionP
   };
 
   return (
-    <section className="mb-12">
-      <div className="mb-8">
-        <h3 className="text-2xl font-bold text-ink">AI 오늘의 투자 추천</h3>
+    <section className="mb-12 -tracking-[0.16px]">
+      <div className="mb-8 border-b border-hairline-soft pb-4">
+        <h3 className="text-2xl font-extrabold text-ink -tracking-[0.4px]">AI 오늘의 투자 추천</h3>
         <p className="text-sm text-steel mt-1">AI가 감성 지수와 가격 변동 모멘텀을 종합하여 매일 엄선합니다.</p>
       </div>
 
@@ -530,11 +494,11 @@ function AiRecommendationsSection({ data, isLoading }: AiRecommendationsSectionP
         {/* Recommended Column */}
         <div className="space-y-4">
           <div className="flex items-center gap-2 mb-2">
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
-            <h4 className="font-bold text-lg text-ink">🔥 AI 오늘의 추천 종목</h4>
+            <span className="w-2.5 h-2.5 rounded-full bg-[#31a24c]" />
+            <h4 className="font-extrabold text-lg text-ink">🔥 AI 오늘의 추천 종목</h4>
           </div>
           {recommended.length === 0 ? (
-            <div className="bg-white border border-hairline-soft rounded-[24px] p-8 text-center text-steel shadow-sm">
+            <div className="bg-canvas border border-hairline-soft rounded-meta-xxl p-8 text-center text-steel shadow-sm">
               추천 종목이 없습니다.
             </div>
           ) : (
@@ -542,30 +506,30 @@ function AiRecommendationsSection({ data, isLoading }: AiRecommendationsSectionP
               <Link
                 key={item.stockCode}
                 href={getLinkHref(item)}
-                className="bg-white border border-hairline-soft hover:border-emerald-200 rounded-[24px] p-6 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-300 group flex flex-col justify-between block min-h-[170px]"
+                className="bg-canvas border border-hairline-soft hover:border-[#31a24c]/40 rounded-meta-xxl p-6 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-300 group flex flex-col justify-between block min-h-[170px]"
               >
                 <div>
                   <div className="flex justify-between items-start mb-2">
                     <div>
-                      <span className="text-[10px] text-steel font-medium tracking-wider">{item.stockCode}</span>
-                      <h5 className="font-bold text-lg group-hover:text-meta-blue transition-colors leading-snug">
+                      <span className="text-[10px] text-steel font-bold tracking-wider">{item.stockCode}</span>
+                      <h5 className="font-extrabold text-lg text-ink group-hover:text-meta-blue transition-colors leading-snug">
                         {item.stockName}
                       </h5>
                     </div>
-                    <span className="px-3 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-600 border border-emerald-100">
+                    <span className="px-3 py-1 rounded-meta-full text-xs font-bold bg-[#31a24c]/10 text-[#31a24c] border border-[#31a24c]/20 shadow-sm -tracking-[0.14px]">
                       매수 {item.aiScore > 0 ? `+${item.aiScore}` : item.aiScore}점
                     </span>
                   </div>
 
                   <div className="flex items-baseline gap-2 mb-3">
-                    <span className="text-lg font-bold text-ink">{fmt(item.price)}원</span>
-                    <span className={`text-xs font-semibold ${item.changeRate >= 0 ? 'text-market-up' : 'text-market-down'}`}>
+                    <span className="text-lg font-black text-ink">{fmt(item.price)}원</span>
+                    <span className={`text-xs font-extrabold ${item.changeRate >= 0 ? 'text-market-up' : 'text-market-down'}`}>
                       {item.changeRate >= 0 ? '+' : ''}{item.changeRate.toFixed(2)}%
                     </span>
                   </div>
                 </div>
 
-                <div className="bg-emerald-50/25 border border-emerald-100/50 rounded-xl p-3.5 text-xs text-slate leading-relaxed">
+                <div className="bg-surface-soft/60 border border-hairline-soft/80 rounded-meta-xl p-4 text-xs text-slate leading-relaxed">
                   {item.reason}
                 </div>
               </Link>
@@ -576,11 +540,11 @@ function AiRecommendationsSection({ data, isLoading }: AiRecommendationsSectionP
         {/* Avoided Column */}
         <div className="space-y-4">
           <div className="flex items-center gap-2 mb-2">
-            <span className="w-2.5 h-2.5 rounded-full bg-rose-500" />
-            <h4 className="font-bold text-lg text-ink">⚠️ AI 오늘의 피해야 할 종목</h4>
+            <span className="w-2.5 h-2.5 rounded-full bg-market-up" />
+            <h4 className="font-extrabold text-lg text-ink">⚠️ AI 오늘의 피해야 할 종목</h4>
           </div>
           {avoided.length === 0 ? (
-            <div className="bg-white border border-hairline-soft rounded-[24px] p-8 text-center text-steel shadow-sm">
+            <div className="bg-canvas border border-hairline-soft rounded-meta-xxl p-8 text-center text-steel shadow-sm">
               회피 종목이 없습니다.
             </div>
           ) : (
@@ -588,30 +552,30 @@ function AiRecommendationsSection({ data, isLoading }: AiRecommendationsSectionP
               <Link
                 key={item.stockCode}
                 href={getLinkHref(item)}
-                className="bg-white border border-hairline-soft hover:border-rose-200 rounded-[24px] p-6 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-300 group flex flex-col justify-between block min-h-[170px]"
+                className="bg-canvas border border-hairline-soft hover:border-market-up/40 rounded-meta-xxl p-6 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-300 group flex flex-col justify-between block min-h-[170px]"
               >
                 <div>
                   <div className="flex justify-between items-start mb-2">
                     <div>
-                      <span className="text-[10px] text-steel font-medium tracking-wider">{item.stockCode}</span>
-                      <h5 className="font-bold text-lg group-hover:text-meta-blue transition-colors leading-snug">
+                      <span className="text-[10px] text-steel font-bold tracking-wider">{item.stockCode}</span>
+                      <h5 className="font-extrabold text-lg text-ink group-hover:text-meta-blue transition-colors leading-snug">
                         {item.stockName}
                       </h5>
                     </div>
-                    <span className="px-3 py-1 rounded-full text-xs font-bold bg-rose-50 text-rose-600 border border-rose-100">
+                    <span className="px-3 py-1 rounded-meta-full text-xs font-bold bg-market-up/10 text-market-up border border-market-up/20 shadow-sm -tracking-[0.14px]">
                       매도 {item.aiScore}점
                     </span>
                   </div>
 
                   <div className="flex items-baseline gap-2 mb-3">
-                    <span className="text-lg font-bold text-ink">{fmt(item.price)}원</span>
-                    <span className={`text-xs font-semibold ${item.changeRate >= 0 ? 'text-market-up' : 'text-market-down'}`}>
+                    <span className="text-lg font-black text-ink">{fmt(item.price)}원</span>
+                    <span className={`text-xs font-extrabold ${item.changeRate >= 0 ? 'text-market-up' : 'text-market-down'}`}>
                       {item.changeRate >= 0 ? '+' : ''}{item.changeRate.toFixed(2)}%
                     </span>
                   </div>
                 </div>
 
-                <div className="bg-rose-50/25 border border-rose-100/50 rounded-xl p-3.5 text-xs text-slate leading-relaxed">
+                <div className="bg-surface-soft/60 border border-hairline-soft/80 rounded-meta-xl p-4 text-xs text-slate leading-relaxed">
                   {item.reason}
                 </div>
               </Link>
@@ -680,68 +644,108 @@ export default function Dashboard() {
           </div>
         )}
 
-        <div className="flex gap-2 mb-10">
+        <div className="flex gap-2 mb-12">
           <button
             onClick={() => setDashboardTab('domestic')}
-            className={`px-4 py-2 rounded-full text-sm font-bold border transition-colors ${
+            className={`px-6 py-2.5 rounded-meta-full text-xs font-bold border transition-all -tracking-[0.14px] cursor-pointer ${
               dashboardTab === 'domestic'
-                ? 'bg-ink text-white border-ink'
-                : 'bg-white text-ink border-hairline hover:border-ink'
+                ? 'bg-ink text-white border-transparent shadow-sm'
+                : 'bg-canvas text-steel border-hairline hover:border-ink hover:text-ink'
             }`}
           >
-            국내
+            국내 주식
           </button>
           <button
             onClick={() => setDashboardTab('overseas')}
-            className={`px-4 py-2 rounded-full text-sm font-bold border transition-colors ${
+            className={`px-6 py-2.5 rounded-meta-full text-xs font-bold border transition-all -tracking-[0.14px] cursor-pointer ${
               dashboardTab === 'overseas'
-                ? 'bg-ink text-white border-ink'
-                : 'bg-white text-ink border-hairline hover:border-ink'
+                ? 'bg-ink text-white border-transparent shadow-sm'
+                : 'bg-canvas text-steel border-hairline hover:border-ink hover:text-ink'
             }`}
           >
-            해외
+            해외 주식
           </button>
         </div>
 
         {dashboardTab === 'domestic' && (
-          <>
-            {isAuthenticated && portfolio && (
-              <>
-                <PortfolioSummary portfolio={portfolio} />
-                <HoldingsList holdings={holdings ?? []} />
-              </>
-            )}
+          <div className="space-y-16">
+            {/* 1. Hero Pick (samsung) */}
+            <HeroSection data={hero} isLoggedIn={isAuthenticated} />
+            
+            {/* 2. Domestic Stocks Grid */}
+            <section className="space-y-6 -tracking-[0.16px]">
+              <div className="flex items-baseline justify-between border-b border-hairline-soft pb-4">
+                <h3 className="text-2xl font-extrabold text-ink -tracking-[0.4px]">🔥 실시간 추천 종목</h3>
+                <span className="text-xs text-steel font-bold">실시간 변동률 반영 피드</span>
+              </div>
+              <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+                {recommended.map((stock) => (
+                  <StockCard key={stock.code} data={stock} />
+                ))}
+              </div>
+            </section>
 
+            {/* 3. AI recommendations */}
             <AiRecommendationsSection data={aiRecommendations} isLoading={aiLoading} />
-          </>
+          </div>
         )}
 
         {dashboardTab === 'overseas' && (
-          <>
-            {isAuthenticated && (
-              <section className="mb-12">
-                <div className="flex items-center justify-between mb-6">
-                  <h3 className="text-2xl font-bold">해외 보유 종목</h3>
-                  <Link href="/overseas-stocks" className="text-meta-blue font-bold text-sm hover:underline">전체 해외 종목 보기</Link>
-                </div>
-                <OverseasBalanceTable />
-              </section>
-            )}
+          <div className="space-y-16">
+            {/* 1. Overseas Recommended Stocks Grid */}
+            <section className="space-y-6 -tracking-[0.16px]">
+              <div className="flex items-baseline justify-between border-b border-hairline-soft pb-4">
+                <h3 className="text-2xl font-extrabold text-ink -tracking-[0.4px]">🌎 인기 해외 추천 종목</h3>
+                <span className="text-xs text-steel font-bold">실시간 글로벌 마켓 트렌드</span>
+              </div>
+              <OverseasRecommendedSection />
+            </section>
 
+            {/* 2. AI recommendations */}
             <AiRecommendationsSection data={aiRecommendations} isLoading={aiLoading} />
 
             {!isAuthenticated && (
-              <div className="bg-white border border-hairline-soft rounded-meta-xl p-8 text-center text-steel text-sm">
-                <Globe className="w-8 h-8 mx-auto mb-3 text-stone" />
-                <p className="font-bold text-ink mb-1">해외 주식 거래</p>
-                <p className="mb-4">로그인 후 해외 주식 잔고를 확인하고 거래할 수 있습니다.</p>
-                <Link href="/login" className="meta-button-buy text-sm px-6 py-2">
+              <div className="bg-canvas border border-hairline-soft rounded-meta-xxl p-8 text-center text-steel text-sm shadow-sm max-w-lg mx-auto -tracking-[0.14px]">
+                <Globe className="w-10 h-10 mx-auto mb-4 text-stone" />
+                <p className="font-extrabold text-lg text-ink mb-1">해외 주식 거래</p>
+                <p className="mb-6 leading-relaxed">로그인 후 해외 주식 잔고를 확인하고 거래할 수 있습니다.</p>
+                <Link href="/login" className="meta-button-buy inline-block text-sm px-6 py-2.5">
                   로그인
                 </Link>
               </div>
             )}
-          </>
+          </div>
         )}
+
+        {/* Real-time AI News Compilation Link Section */}
+        <div className="mt-20 bg-canvas border border-hairline-soft rounded-meta-xxxl p-8 md:p-12 shadow-[0_20px_40px_rgba(0,100,224,0.06)] overflow-hidden relative group -tracking-[0.16px]">
+          <div className="absolute top-0 right-0 w-96 h-96 bg-meta-blue/5 rounded-full blur-3xl pointer-events-none -mr-20 -mt-20 group-hover:bg-meta-blue/10 transition-all duration-500" />
+          <div className="absolute bottom-0 left-0 w-80 h-80 bg-indigo-500/5 rounded-full blur-3xl pointer-events-none -ml-20 -mb-20" />
+          
+          <div className="relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-8">
+            <div className="space-y-3">
+              <div className="inline-flex items-center gap-1.5 px-3.5 py-1 bg-meta-blue/10 border border-meta-blue/20 rounded-meta-full text-xs font-bold text-meta-blue shadow-sm -tracking-[0.14px]">
+                <Sparkles className="w-3.5 h-3.5 text-meta-blue animate-pulse" />
+                AI 실시간 수집 뉴스
+              </div>
+              <h4 className="text-2xl md:text-3xl font-extrabold text-ink tracking-tight leading-tight -tracking-[0.4px]">
+                실시간 AI 수집 뉴스 모아보기
+              </h4>
+              <p className="text-sm md:text-base text-slate max-w-2xl leading-relaxed">
+                국내 및 해외 주요 16개 관심 종목의 기사들을 인공지능이 실시간 크롤링하여 
+                투자 감성 지수 분석과 호재/악재 감지 피드를 일괄적으로 제공합니다.
+              </p>
+            </div>
+            
+            <Link
+              href="/ai-news"
+              className="meta-button-primary inline-flex items-center gap-2 group-hover:scale-[1.03] transition-transform duration-300 shadow-md font-bold text-sm -tracking-[0.14px] px-8 py-3.5 rounded-meta-full cursor-pointer flex-shrink-0"
+            >
+              수집 뉴스 더보기
+              <ArrowUpRight className="w-4 h-4 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
+            </Link>
+          </div>
+        </div>
       </main>
 
       <button className="md:hidden fixed bottom-8 right-8 w-14 h-14 bg-meta-blue text-white rounded-full shadow-xl flex items-center justify-center">

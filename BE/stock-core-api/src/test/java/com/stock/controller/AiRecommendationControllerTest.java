@@ -1,6 +1,7 @@
 package com.stock.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.stock.config.KisConfig;
 import com.stock.infrastructure.client.AiServerClient;
 import com.stock.infrastructure.dto.ai.DashboardRecommendationsResponse;
 import com.stock.infrastructure.dto.ai.StockAiAnalysisResponse;
@@ -37,6 +38,9 @@ public class AiRecommendationControllerTest {
 
     @Autowired
     private MockMvc mockMvc;
+
+    @MockBean
+    private KisConfig kisConfig;
 
     @MockBean
     private AiServerClient aiServerClient;

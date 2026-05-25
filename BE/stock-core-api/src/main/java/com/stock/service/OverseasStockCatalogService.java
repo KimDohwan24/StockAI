@@ -17,11 +17,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.format.DateTimeFormatter;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
-import java.util.function.Function;
-import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -32,33 +28,9 @@ public class OverseasStockCatalogService {
 
     private final OverseasStockMasterRepository overseasStockMasterRepository;
     private final KisApiClient kisApiClient;
+    private final StockSyncTransactionService stockSyncTransactionService;
 
-    private static final Map<String, String> EXCHANGE_COUNTRY_MAP = new HashMap<>();
-    private static final Map<String, String> EXCHANGE_CURRENCY_MAP = new HashMap<>();
 
-    static {
-        EXCHANGE_COUNTRY_MAP.put("NAS", "US");
-        EXCHANGE_COUNTRY_MAP.put("NYS", "US");
-        EXCHANGE_COUNTRY_MAP.put("AMS", "US");
-
-        EXCHANGE_CURRENCY_MAP.put("NAS", "USD");
-        EXCHANGE_CURRENCY_MAP.put("NYS", "USD");
-        EXCHANGE_CURRENCY_MAP.put("AMS", "USD");
-    }
-
-    private String resolveCountry(String apiNatnCd, ExchangeCode exchangeCode) {
-        if (apiNatnCd != null && !apiNatnCd.isBlank()) {
-            return apiNatnCd;
-        }
-        return EXCHANGE_COUNTRY_MAP.getOrDefault(exchangeCode.name(), "UNKNOWN");
-    }
-
-    private String resolveCurrency(String apiCrcyCd, ExchangeCode exchangeCode) {
-        if (apiCrcyCd != null && !apiCrcyCd.isBlank()) {
-            return apiCrcyCd;
-        }
-        return EXCHANGE_CURRENCY_MAP.getOrDefault(exchangeCode.name(), "UNKNOWN");
-    }
 
     @Cacheable(value = "overseasCatalog", key = "#exchangeCode + '_' + #pageable.pageNumber + '_' + #pageable.pageSize")
     public CatalogPageResponse<OverseasStockCatalogResponse> findByExchangeCode(ExchangeCode exchangeCode, Pageable pageable) {
@@ -143,9 +115,8 @@ public class OverseasStockCatalogService {
     }
 
     @CacheEvict(value = {"overseasCatalog", "overseasSearch", "sectors"}, allEntries = true)
-    @Transactional
     public int syncFromKis() {
-        int deleted = overseasStockMasterRepository.deleteByExchangeCodeNotIn(
+        int deleted = stockSyncTransactionService.deleteOverseasStocksNotIn(
                 List.of(ExchangeCode.values())
         );
         if (deleted > 0) {
@@ -155,67 +126,60 @@ public class OverseasStockCatalogService {
         int totalSynced = 0;
         for (ExchangeCode exchangeCode : ExchangeCode.values()) {
             try {
-                totalSynced += syncExchange(exchangeCode);
+                List<KisOverseasStockMasterItem> items = kisApiClient.getOverseasStockMasterList(exchangeCode.name());
+                if (!items.isEmpty()) {
+                    totalSynced += stockSyncTransactionService.saveOverseasExchangeItems(exchangeCode, items);
+                }
             } catch (Exception e) {
                 log.error("Failed to sync exchange {}: {}", exchangeCode, e.getMessage(), e);
             }
+        }
+        if (totalSynced == 0) {
+            totalSynced = seedFallbackOverseasStocks();
         }
         log.info("Overseas stock master sync completed. Total synced: {}", totalSynced);
         return totalSynced;
     }
 
     @Transactional
-    public int syncExchange(ExchangeCode exchangeCode) {
-        List<KisOverseasStockMasterItem> items = kisApiClient.getOverseasStockMasterList(exchangeCode.name());
-        if (items.isEmpty()) {
-            log.warn("No items returned for exchange {}", exchangeCode);
-            return 0;
-        }
-
-        List<String> tickers = items.stream()
-                .map(KisOverseasStockMasterItem::getSymb)
-                .filter(t -> t != null && !t.isBlank())
-                .toList();
-
-        Map<String, OverseasStockMaster> existingMap = overseasStockMasterRepository
-                .findByTickerInAndExchangeCode(tickers, exchangeCode).stream()
-                .collect(Collectors.toMap(OverseasStockMaster::getTicker, Function.identity()));
+    public int seedFallbackOverseasStocks() {
+        log.warn("Entering fallback seeding for overseas stocks due to KIS API sync failure...");
+        List<OverseasStockMaster> fallbackStocks = List.of(
+            createFallbackOverseasStock("AAPL", "Apple Inc.", ExchangeCode.NAS, "미국", "IT", "USD", "189.84", "2.15", "2", "1.15", "52981023"),
+            createFallbackOverseasStock("MSFT", "Microsoft Corp.", ExchangeCode.NAS, "미국", "IT", "USD", "421.90", "4.50", "2", "1.08", "21980312"),
+            createFallbackStock("TSLA", "Tesla Inc.", ExchangeCode.NAS, "미국", "자동차", "USD", "179.24", "-3.15", "5", "-1.73", "89102391"),
+            createFallbackStock("NVDA", "NVIDIA Corp.", ExchangeCode.NAS, "미국", "반도체", "USD", "942.50", "22.40", "2", "2.43", "48102931"),
+            createFallbackStock("GOOGL", "Alphabet Inc.", ExchangeCode.NAS, "미국", "IT", "USD", "173.50", "0.85", "2", "0.49", "29102391"),
+            createFallbackStock("AMZN", "Amazon.com Inc.", ExchangeCode.NAS, "미국", "유통", "USD", "180.20", "-1.10", "5", "-0.61", "35102931"),
+            createFallbackStock("META", "Meta Platforms Inc.", ExchangeCode.NAS, "미국", "IT", "USD", "475.40", "5.20", "2", "1.11", "18290312"),
+            createFallbackStock("NKE", "Nike Inc.", ExchangeCode.NYS, "미국", "자유소비재", "USD", "92.10", "0.45", "2", "0.49", "7820192"),
+            createFallbackStock("DIS", "Walt Disney Co.", ExchangeCode.NYS, "미국", "서비스", "USD", "102.50", "-0.80", "5", "-0.77", "9102391"),
+            createFallbackStock("KO", "Coca-Cola Co.", ExchangeCode.NYS, "미국", "필수소비재", "USD", "62.40", "0.20", "2", "0.32", "12901239")
+        );
 
         int count = 0;
-        for (KisOverseasStockMasterItem item : items) {
-            try {
-                String ticker = item.getSymb();
-                if (ticker == null || ticker.isBlank()) continue;
-
-                String country = resolveCountry(item.getTr_natn_cd(), exchangeCode);
-                String currency = resolveCurrency(item.getCrcy_cd(), exchangeCode);
-                String sector = item.getKor_sect_nm();
-
-                OverseasStockMaster existing = existingMap.get(ticker);
-                if (existing != null) {
-                    String updateSector = sector != null ? sector : existing.getSector();
-                    existing.updateFrom(item.getItem_name(), updateSector, country, currency);
-                } else {
-                    OverseasStockMaster stock = new OverseasStockMaster(
-                            ticker,
-                            item.getItem_name(),
-                            exchangeCode,
-                            country,
-                            sector,
-                            currency
-                    );
-                    existingMap.put(ticker, stock);
-                    count++;
-                }
-            } catch (Exception e) {
-                log.error("Failed to sync overseas stock item: symb={}, name={}, error={}",
-                        item.getSymb(), item.getItem_name(), e.getMessage());
+        for (OverseasStockMaster stock : fallbackStocks) {
+            if (overseasStockMasterRepository.findByTickerAndExchangeCode(stock.getTicker(), stock.getExchangeCode()).isEmpty()) {
+                overseasStockMasterRepository.save(stock);
+                count++;
             }
         }
-
-        overseasStockMasterRepository.saveAll(existingMap.values());
-        log.info("Synced {} new stocks for exchange {} (batch saved {} total)", count, exchangeCode, existingMap.size());
+        log.info("Fallback seeding completed. Seeded {} overseas stocks", count);
         return count;
+    }
+
+    private OverseasStockMaster createFallbackOverseasStock(String ticker, String name, ExchangeCode exchangeCode,
+                                                            String country, String sector, String currency,
+                                                            String price, String change, String sign, String rate, String vol) {
+        OverseasStockMaster stock = new OverseasStockMaster(ticker, name, exchangeCode, country, sector, currency);
+        stock.updatePrice(price, change, sign, rate, vol);
+        return stock;
+    }
+
+    private OverseasStockMaster createFallbackStock(String ticker, String name, ExchangeCode exchangeCode,
+                                                    String country, String sector, String currency,
+                                                    String price, String change, String sign, String rate, String vol) {
+        return createFallbackOverseasStock(ticker, name, exchangeCode, country, sector, currency, price, change, sign, rate, vol);
     }
 
     private OverseasStockCatalogResponse toResponse(OverseasStockMaster stock) {

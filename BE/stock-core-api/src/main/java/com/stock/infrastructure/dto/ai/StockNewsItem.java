@@ -11,4 +11,8 @@ public class StockNewsItem {
     private String sentiment; // positive, negative, neutral
     private double sentimentScore;
     private double confidence;
+    
+    // Additional optional fields for aggregated news page
+    private String stockCode;
+    private String stockName;
 }

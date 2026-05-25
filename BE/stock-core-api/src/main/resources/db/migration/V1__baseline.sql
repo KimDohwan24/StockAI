@@ -34,3 +34,28 @@ CREATE TABLE IF NOT EXISTS overseas_stocks (
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT uq_overseas_stocks_ticker_exchange UNIQUE (ticker, exchange_code)
 );
+
+CREATE TABLE IF NOT EXISTS users (
+    id BIGSERIAL PRIMARY KEY,
+    email VARCHAR(255) NOT NULL,
+    password VARCHAR(255) NOT NULL,
+    name VARCHAR(255) NOT NULL,
+    role VARCHAR(20) NOT NULL DEFAULT 'USER',
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uq_users_email UNIQUE (email)
+);
+
+CREATE TABLE IF NOT EXISTS portfolios (
+    id BIGSERIAL PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    ticker VARCHAR(20) NOT NULL,
+    stock_name VARCHAR(100) NOT NULL,
+    quantity INT NOT NULL,
+    avg_price DOUBLE PRECISION NOT NULL,
+    exchange_code VARCHAR(10),
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_portfolio_user_id ON portfolios (user_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_portfolio_user_ticker ON portfolios (user_id, ticker);

@@ -28,7 +28,7 @@ export default function OverseasBalanceTable() {
   if (isLoading) {
     return (
       <div className="bg-white border border-hairline-soft rounded-meta-xl p-8 text-center text-steel text-sm animate-pulse">
-        해외 잔고를 불러오는 중...
+        잔고를 불러오는 중...
       </div>
     );
   }
@@ -36,7 +36,7 @@ export default function OverseasBalanceTable() {
   if (error || !data || !data.output1 || data.output1.length === 0) {
     return (
       <div className="bg-white border border-hairline-soft rounded-meta-xl p-8 text-center text-steel text-sm">
-        해외 보유 종목이 없습니다
+        보유 종목이 없습니다
       </div>
     );
   }
@@ -95,7 +95,7 @@ export default function OverseasBalanceTable() {
         <div className="border-t border-hairline-soft px-5 py-3 flex justify-between text-sm text-steel">
           <span>총 평가금액</span>
           <span className="font-bold text-ink">
-            {data.output2.totalEvaluatedAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })} USD
+            {Math.round(data.output2.totalEvaluatedAmount).toLocaleString('ko-KR')}원
           </span>
         </div>
       )}

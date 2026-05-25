@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useMemo, useEffect, useRef } from 'react';
-import { useParams } from 'next/navigation';
+import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
+import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import useSWR, { mutate } from 'swr';
 import StockChart, { CandlePoint } from '@/components/StockChart';
@@ -10,6 +10,7 @@ import {
   getDailyCandles,
   getMinuteCandles,
   getHoldings,
+  getPortfolio,
   buyOrder,
   sellOrder,
   MappedStockPrice,
@@ -17,6 +18,12 @@ import {
   MappedMinuteCandle,
   OrderResult,
   getStockAiAnalysis,
+  getSystemConfig,
+  getFavoriteStatus,
+  toggleFavorite,
+  addBasketItem,
+  deleteBasketItem,
+  getBasketItems,
 } from '@/lib/api';
 import AiDecisionGauge from '@/components/AiDecisionGauge';
 import NewsSection from '@/components/NewsSection';
@@ -32,11 +39,14 @@ import {
   Landmark,
   ArrowUpRight,
   ArrowDownRight,
+  Star,
+  ShoppingCart,
 } from 'lucide-react';
 
 import { useAuth } from '@/lib/auth';
 import { useVisibility } from '@/hooks/useVisibility';
 import { useStockPriceStream } from '@/hooks/useStockPriceStream';
+import { resolveStockName } from '@/lib/stockMap';
 
 type Period = 'D' | 'W' | 'M' | 'Y';
 
@@ -103,9 +113,13 @@ function TradePanel({
   const [quantity, setQuantity] = useState(1);
   const [orderLoading, setOrderLoading] = useState(false);
   const [orderMsg, setOrderMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const { data: systemConfig } = useSWR('system-config', getSystemConfig, {
+    revalidateOnFocus: false,
+    dedupingInterval: 300000,
+  });
+  const mockOrderEnabled = systemConfig?.mockOrderEnabled ?? null;
 
   const currentPrice = priceInfo?.price ?? 0;
-  const totalAmount = currentPrice * quantity;
   const { flashKey, flashClass } = usePriceFlash(currentPrice);
 
   const { data: holdings } = useSWR(
@@ -118,22 +132,53 @@ function TradePanel({
     [holdings, stockCode]
   );
 
+  const { data: portfolio } = useSWR(
+    isAuthenticated ? 'dashboard-portfolio' : null,
+    () => getPortfolio(),
+    { dedupingInterval: 30000, revalidateOnFocus: false }
+  );
+
+  const maxPurchasableQty = useMemo(() => {
+    const cash = portfolio?.cashBalance ?? 0;
+    return currentPrice > 0 ? Math.floor(cash / currentPrice) : 0;
+  }, [portfolio?.cashBalance, currentPrice]);
+
+  const clampQuantity = useCallback(
+    (val: number, currentSide: 'buy' | 'sell') => {
+      if (currentSide === 'sell') {
+        const maxQty = userHolding?.quantity ?? 0;
+        const minQty = maxQty === 0 ? 0 : 1;
+        return Math.max(minQty, Math.min(val, maxQty));
+      } else {
+        const maxQty = maxPurchasableQty;
+        const minQty = maxQty === 0 ? 0 : 1;
+        return Math.max(minQty, Math.min(val, maxQty));
+      }
+    },
+    [userHolding, maxPurchasableQty]
+  );
+
+  const finalQuantity = useMemo(() => clampQuantity(quantity, side), [clampQuantity, quantity, side]);
+
+  const totalAmount = currentPrice * finalQuantity;
+
   const handleOrder = async () => {
-    if (quantity <= 0) return;
+    if (finalQuantity <= 0) return;
     setOrderLoading(true);
     setOrderMsg(null);
     try {
       let result: OrderResult;
       if (side === 'buy') {
-        result = await buyOrder(stockCode, quantity, priceInfo?.price ?? 0);
+        result = await buyOrder(stockCode, finalQuantity, priceInfo?.price ?? 0);
       } else {
-        result = await sellOrder(stockCode, quantity, priceInfo?.price ?? 0);
+        result = await sellOrder(stockCode, finalQuantity, priceInfo?.price ?? 0);
       }
       setOrderMsg({
         type: 'success',
-        text: `${result.side === 'BUY' ? '매수' : '매도'} 완료: ${result.stockName} ${result.quantity}주 @ ${fmt(result.price)}원`,
+        text: `${result.side === 'BUY' ? '매수' : '매도'} 완료: ${result.stockName || priceInfo?.stockName || stockCode} ${result.quantity}주 @ ${fmt(result.price)}원`,
       });
       mutate('dashboard-holdings');
+      mutate('dashboard-portfolio');
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : '주문에 실패했습니다.';
       setOrderMsg({ type: 'error', text: msg });
@@ -198,25 +243,40 @@ function TradePanel({
         <label className="block text-xs text-steel mb-1.5">수량</label>
         <div className="flex items-center gap-2">
           <button
-            onClick={() => setQuantity(Math.max(1, quantity - 1))}
+            onClick={() => setQuantity(clampQuantity(finalQuantity - 1, side))}
             className="w-10 h-10 rounded-meta-xl bg-surface-soft text-ink font-bold hover:bg-hairline-soft transition-colors"
           >
             -
           </button>
           <input
             type="number"
-            value={quantity}
-            onChange={(e) => setQuantity(Math.max(1, parseInt(e.target.value) || 1))}
-            min={1}
+            value={finalQuantity}
+            onChange={(e) => {
+              const val = parseInt(e.target.value) || 0;
+              setQuantity(clampQuantity(val, side));
+            }}
+            min={side === 'sell' && (userHolding?.quantity ?? 0) === 0 ? 0 : 1}
             className="flex-1 text-center px-4 py-2.5 border border-hairline-soft rounded-meta-xl text-sm font-bold focus:outline-none focus:border-meta-blue transition-colors"
           />
           <button
-            onClick={() => setQuantity(quantity + 1)}
+            onClick={() => setQuantity(clampQuantity(finalQuantity + 1, side))}
             className="w-10 h-10 rounded-meta-xl bg-surface-soft text-ink font-bold hover:bg-hairline-soft transition-colors"
           >
             +
           </button>
         </div>
+        {side === 'buy' && portfolio && (
+          <div className="flex justify-between items-center mt-1.5 px-1 text-xs">
+            <span className="text-steel">보유 금액: {fmt(portfolio.cashBalance)}원</span>
+            <span className="text-meta-blue font-semibold">최대 {maxPurchasableQty}주 구매 가능</span>
+          </div>
+        )}
+        {side === 'sell' && (
+          <div className="flex justify-between items-center mt-1.5 px-1 text-xs">
+            <span className="text-steel">보유 수량: {userHolding?.quantity ?? 0}주</span>
+            <span className="text-meta-blue font-semibold">최대 {userHolding?.quantity ?? 0}주 매도 가능</span>
+          </div>
+        )}
       </div>
 
       <div className="bg-surface-soft rounded-meta-xl px-4 py-3">
@@ -242,9 +302,21 @@ function TradePanel({
         </div>
       )}
 
+      {mockOrderEnabled !== null && (
+        <div className={`text-[11px] text-center px-3 py-1.5 rounded-meta-xl ${
+          mockOrderEnabled 
+            ? 'bg-meta-blue/5 text-meta-blue border border-meta-blue/15' 
+            : 'bg-market-up/5 text-market-up border border-market-up/15'
+        }`}>
+          {mockOrderEnabled
+            ? '⚡ 한국투자증권 모의투자 연동 (장 운영 시간 내 체결)'
+            : '🟢 로컬 가상 체결 모드 활성화 (24시간 즉시 체결)'}
+        </div>
+      )}
+
       <button
         onClick={handleOrder}
-        disabled={orderLoading || quantity <= 0 || currentPrice === 0}
+        disabled={orderLoading || finalQuantity <= 0 || currentPrice === 0}
         className={`w-full py-3 rounded-meta-full font-bold text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
           side === 'buy'
             ? 'bg-market-up text-white active:bg-red-700'
@@ -280,9 +352,77 @@ export default function StockDetailPage() {
   const { price: wsPrice } = useStockPriceStream(stockCode, swrPrice ?? null);
 
   const priceInfo = wsPrice ?? swrPrice ?? null;
-  const stockName = priceInfo?.stockName || stockCode;
+  const stockName = resolveStockName(stockCode, priceInfo?.stockName);
 
   const { flashKey, flashClass } = usePriceFlash(priceInfo?.price);
+
+  const { data: favoriteData, mutate: mutateFavorite } = useSWR(
+    isAuthenticated && stockCode ? `favorite-status-${stockCode}` : null,
+    () => getFavoriteStatus(stockCode),
+    { revalidateOnFocus: false, dedupingInterval: 30000 }
+  );
+  const isFavorite = favoriteData?.favorited ?? false;
+  const [favoriteToggleLoading, setFavoriteToggleLoading] = useState(false);
+
+  const handleToggleFavorite = async () => {
+    if (!isAuthenticated) return;
+    setFavoriteToggleLoading(true);
+    try {
+      const res = await toggleFavorite(stockCode);
+      mutate(`favorite-status-${stockCode}`, { favorited: res.favorited }, false);
+      mutate('user-favorites');
+    } catch (err) {
+      console.error('Failed to toggle favorite:', err);
+    } finally {
+      setFavoriteToggleLoading(false);
+    }
+  };
+
+  const router = useRouter();
+  const { data: basketItems } = useSWR(
+    isAuthenticated ? 'user-basket-items' : null,
+    getBasketItems,
+    { revalidateOnFocus: false, dedupingInterval: 30000 }
+  );
+  const basketItem = basketItems?.find((b) => b.stockCode === stockCode);
+  const isInBasket = !!basketItem;
+  const [basketToggleLoading, setBasketToggleLoading] = useState(false);
+
+  const handleToggleBasket = async () => {
+    if (!isAuthenticated) return;
+    setBasketToggleLoading(true);
+    try {
+      if (isInBasket) {
+        if (confirm('장바구니에서 이 종목을 삭제하시겠습니까?')) {
+          await deleteBasketItem(basketItem.id);
+          mutate('user-basket-items', basketItems?.filter((b) => b.id !== basketItem.id) || [], false);
+          mutate('user-basket-items');
+        }
+      } else {
+        const rawPrice = priceInfo?.price;
+        const targetPrice = rawPrice ? parseFloat(String(rawPrice)) : 0;
+        const defaultWeight = 10;
+        
+        await addBasketItem(stockCode, targetPrice, defaultWeight);
+        mutate('user-basket-items');
+        
+        if (confirm('장바구니에 추가되었습니다. 장바구니 페이지로 이동하시겠습니까?')) {
+          router.push('/basket');
+        }
+      }
+    } catch (err) {
+      console.error('Failed to toggle basket:', err);
+      alert('장바구니 처리에 실패했습니다.');
+    } finally {
+      setBasketToggleLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (stockName) {
+      document.title = `${stockName} (${stockCode}) | StockAI`;
+    }
+  }, [stockName, stockCode]);
 
   const [period, setPeriod] = useState<Period>('D');
   const [viewMode, setViewMode] = useState<'daily' | 'minute'>('daily');
@@ -358,8 +498,45 @@ export default function StockDetailPage() {
           <div className="space-y-8">
             {/* Price Hero */}
             <section className="bg-white border border-hairline-soft rounded-[24px] p-8 shadow-sm">
-              <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-6">
+              <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-6">
                 <div>
+                  <h1 className="text-3xl font-extrabold text-ink mb-4 flex items-center gap-3">
+                    <span className="flex items-baseline gap-2">
+                      {stockName} <span className="text-sm text-steel font-normal">({stockCode})</span>
+                    </span>
+                    {isAuthenticated && (
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={handleToggleFavorite}
+                          disabled={favoriteToggleLoading}
+                          className="p-1.5 rounded-full hover:bg-surface-soft transition-colors cursor-pointer group"
+                          title={isFavorite ? '즐겨찾기 해제' : '즐겨찾기 추가'}
+                        >
+                          <Star
+                            className={`w-6 h-6 transition-all duration-300 ${
+                              isFavorite
+                                ? 'text-yellow-500 fill-yellow-500 scale-110'
+                                : 'text-steel group-hover:text-yellow-500 group-hover:scale-105'
+                            }`}
+                          />
+                        </button>
+                        <button
+                          onClick={handleToggleBasket}
+                          disabled={basketToggleLoading}
+                          className="p-1.5 rounded-full hover:bg-surface-soft transition-colors cursor-pointer group"
+                          title={isInBasket ? '장바구니에서 해제' : '장바구니에 담기'}
+                        >
+                          <ShoppingCart
+                            className={`w-6 h-6 transition-all duration-300 ${
+                              isInBasket
+                                ? 'text-meta-blue fill-meta-blue/20 scale-110'
+                                : 'text-steel group-hover:text-meta-blue group-hover:scale-105'
+                            }`}
+                          />
+                        </button>
+                      </div>
+                    )}
+                  </h1>
                   <p className="text-sm text-steel mb-1 flex items-center gap-1.5">
                     <Activity className="w-4 h-4" />
                     현재가

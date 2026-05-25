@@ -41,7 +41,7 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOriginPatterns(List.of("http://localhost:*", "https://*.vercel.app"));
+        configuration.setAllowedOriginPatterns(List.of("http://localhost:*", "https://*.vercel.app", "http://stock-frontend:*", "http://172.18.*.*:*"));
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("*"));
         configuration.setAllowCredentials(true);
@@ -77,7 +77,8 @@ public class SecurityConfig {
                 .requestMatchers(AntPathRequestMatcher.antMatcher("/api/stocks/trending")).permitAll()
                 .requestMatchers(AntPathRequestMatcher.antMatcher("/api/overseas-stocks/trending")).permitAll()
                 .requestMatchers(AntPathRequestMatcher.antMatcher("/api/trending/**")).permitAll()
-                .requestMatchers(AntPathRequestMatcher.antMatcher("/api/account/**")).permitAll()
+                .requestMatchers(AntPathRequestMatcher.antMatcher("/api/account/**")).authenticated()
+                .requestMatchers(AntPathRequestMatcher.antMatcher("/api/overseas-account/**")).authenticated()
                 .requestMatchers(AntPathRequestMatcher.antMatcher("/api/portfolio/**")).authenticated()
                 .requestMatchers(AntPathRequestMatcher.antMatcher("/api/v1/stocks/**")).permitAll()
                 .requestMatchers(AntPathRequestMatcher.antMatcher("/api/ws/**")).permitAll()

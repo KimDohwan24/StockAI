@@ -22,7 +22,7 @@ public class TrendingService {
     private final StockMasterRepository stockMasterRepository;
     private final OverseasStockMasterRepository overseasStockMasterRepository;
 
-    @Cacheable(value = "trending", key = "'domestic'")
+    @Cacheable(value = "trending", key = "'domestic:' + #limit")
     public List<TrendingResponse> getDomesticTrending(int limit) {
         PageRequest pageRequest = PageRequest.of(0, limit, Sort.by(Sort.Direction.DESC, "volume"));
         List<StockMaster> stocks = stockMasterRepository.findAll(pageRequest).getContent();
@@ -35,7 +35,7 @@ public class TrendingService {
                 .toList();
     }
 
-    @Cacheable(value = "trending", key = "'overseas'")
+    @Cacheable(value = "trending", key = "'overseas:' + #limit")
     public List<TrendingResponse> getOverseasTrending(int limit) {
         PageRequest pageRequest = PageRequest.of(0, limit, Sort.by(Sort.Direction.DESC, "volume"));
         List<OverseasStockMaster> stocks = overseasStockMasterRepository.findAll(pageRequest).getContent();

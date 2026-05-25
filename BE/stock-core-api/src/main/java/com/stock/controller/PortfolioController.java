@@ -1,6 +1,7 @@
 package com.stock.controller;
 
-import com.stock.controller.dto.PortfolioRequest;
+import com.stock.controller.dto.HoldingResponse;
+import com.stock.controller.dto.OnboardingRequest;
 import com.stock.controller.dto.PortfolioResponse;
 import com.stock.service.PortfolioService;
 import jakarta.validation.Valid;
@@ -21,32 +22,22 @@ public class PortfolioController {
     private final PortfolioService portfolioService;
 
     @GetMapping
-    public ResponseEntity<List<PortfolioResponse>> getPortfolios(
+    public ResponseEntity<PortfolioResponse> getPortfolioSummary(
             @AuthenticationPrincipal UserDetails userDetails) {
-        return ResponseEntity.ok(portfolioService.getPortfolios(userDetails.getUsername()));
+        return ResponseEntity.ok(portfolioService.getPortfolioSummary(userDetails.getUsername()));
     }
 
     @PostMapping
-    public ResponseEntity<PortfolioResponse> addPortfolio(
+    public ResponseEntity<PortfolioResponse> createPortfolio(
             @AuthenticationPrincipal UserDetails userDetails,
-            @Valid @RequestBody PortfolioRequest request) {
+            @Valid @RequestBody OnboardingRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(portfolioService.addPortfolio(userDetails.getUsername(), request));
+                .body(portfolioService.createPortfolio(userDetails.getUsername(), request.initialBalance()));
     }
 
-    @PutMapping("/{ticker}")
-    public ResponseEntity<PortfolioResponse> updatePortfolio(
-            @AuthenticationPrincipal UserDetails userDetails,
-            @PathVariable String ticker,
-            @Valid @RequestBody PortfolioRequest request) {
-        return ResponseEntity.ok(portfolioService.updatePortfolio(userDetails.getUsername(), ticker, request));
-    }
-
-    @DeleteMapping("/{ticker}")
-    public ResponseEntity<Void> removePortfolio(
-            @AuthenticationPrincipal UserDetails userDetails,
-            @PathVariable String ticker) {
-        portfolioService.removePortfolio(userDetails.getUsername(), ticker);
-        return ResponseEntity.noContent().build();
+    @GetMapping("/holdings")
+    public ResponseEntity<List<HoldingResponse>> getHoldings(
+            @AuthenticationPrincipal UserDetails userDetails) {
+        return ResponseEntity.ok(portfolioService.getHoldings(userDetails.getUsername()));
     }
 }

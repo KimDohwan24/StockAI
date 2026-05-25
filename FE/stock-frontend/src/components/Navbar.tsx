@@ -25,6 +25,7 @@ import {
   getUnreadNotificationCount,
   readAllNotifications,
   getBasketItems,
+  clearAllNotifications,
 } from '@/lib/api';
 import StockSearchBar from '@/components/stocks/StockSearchBar';
 import OverseasStockSearchBar from '@/components/overseas/OverseasStockSearchBar';
@@ -47,6 +48,10 @@ export default function Navbar() {
 
   const [notifDropdownOpen, setNotifDropdownOpen] = useState(false);
   const notifDropdownRef = useRef<HTMLDivElement>(null);
+
+  const [activeToast, setActiveToast] = useState<string | null>(null);
+  const lastToastNotifIdRef = useRef<number | null>(null);
+  const [isFirstLoad, setIsFirstLoad] = useState(true);
 
   useEffect(() => {
     // Ensure light mode is active since dark mode button is removed
@@ -84,6 +89,30 @@ export default function Navbar() {
     { revalidateOnFocus: true, refreshInterval: 30000 }
   );
   const basketCount = basketItems?.length ?? 0;
+
+  useEffect(() => {
+    if (notificationsLoading || !notifications) return;
+
+    if (isFirstLoad) {
+      if (notifications.length > 0) {
+        lastToastNotifIdRef.current = notifications[0].id;
+      }
+      setIsFirstLoad(false);
+      return;
+    }
+
+    if (notifications.length > 0) {
+      const latestNotif = notifications[0];
+      if (!latestNotif.read && latestNotif.id !== lastToastNotifIdRef.current) {
+        setActiveToast(latestNotif.message);
+        lastToastNotifIdRef.current = latestNotif.id;
+        const timer = setTimeout(() => {
+          setActiveToast(null);
+        }, 5000);
+        return () => clearTimeout(timer);
+      }
+    }
+  }, [notifications, notificationsLoading, isFirstLoad]);
 
   const handleRemoveFavorite = async (e: React.MouseEvent, stockCode: string) => {
     e.preventDefault();
@@ -147,8 +176,22 @@ export default function Navbar() {
     }
   };
 
+  const handleClearNotifications = async () => {
+    if (!confirm('정말 모든 알림 내역을 비우시겠습니까?')) return;
+    try {
+      await clearAllNotifications();
+      mutateNotifications([], false);
+      mutateUnread({ count: 0 }, false);
+      mutateNotifications();
+      mutateUnread();
+    } catch (err) {
+      console.error('Failed to clear notifications:', err);
+    }
+  };
+
   return (
-    <nav className="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-hairline-soft h-16">
+    <>
+      <nav className="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-hairline-soft h-16">
       <div className="max-w-7xl mx-auto px-6 h-full flex items-center justify-between">
         <div className="flex items-center gap-4 md:gap-6">
           <div className="flex items-center gap-3">
@@ -314,9 +357,19 @@ export default function Navbar() {
             {notifDropdownOpen && (
               <div className="absolute right-0 top-full mt-1 bg-white border border-hairline-soft rounded-xl shadow-lg z-50 min-w-[320px] py-3 px-4 max-h-[360px] overflow-y-auto">
                 <h4 className="text-xs font-bold text-slate mb-3 flex items-center justify-between border-b border-hairline-soft pb-2">
-                  <span>알림 내역</span>
-                  {unreadCount > 0 && (
-                    <span className="text-[10px] text-red-500 font-bold">신규 알림 {unreadCount}개</span>
+                  <div className="flex items-center gap-2">
+                    <span>알림 내역</span>
+                    {unreadCount > 0 && (
+                      <span className="text-[9px] bg-red-100 text-red-600 px-1.5 py-0.5 rounded-full font-bold">신규 {unreadCount}</span>
+                    )}
+                  </div>
+                  {notifications && notifications.length > 0 && (
+                    <button
+                      onClick={handleClearNotifications}
+                      className="text-[10px] text-steel hover:text-red-500 hover:underline cursor-pointer font-bold"
+                    >
+                      모두 비우기
+                    </button>
                   )}
                 </h4>
                 {notificationsLoading ? (
@@ -430,5 +483,35 @@ export default function Navbar() {
         </div>
       </div>
     </nav>
+      {/* 4. 실시간 토스트 알림 컴포넌트 */}
+      {activeToast && (
+        <>
+          <style>{`
+            @keyframes slideIn {
+              from { transform: translateY(-20px); opacity: 0; }
+              to { transform: translateY(0); opacity: 1; }
+            }
+          `}</style>
+          <div
+            className="fixed top-20 right-6 z-50 max-w-sm bg-white border border-hairline-soft rounded-2xl p-4 shadow-xl flex items-start gap-3 transition-all duration-300"
+            style={{ animation: 'slideIn 0.3s ease-out', boxShadow: '0 20px 40px rgba(0, 100, 224, 0.12)' }}
+          >
+            <div className="w-8 h-8 rounded-full bg-meta-blue/10 text-meta-blue flex items-center justify-center flex-shrink-0">
+              <Bell className="w-4.5 h-4.5" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-bold text-ink">실시간 체결 알림</p>
+              <p className="text-xs text-slate mt-1 leading-normal">{activeToast}</p>
+            </div>
+            <button
+              onClick={() => setActiveToast(null)}
+              className="text-stone hover:text-ink cursor-pointer text-xs font-bold px-1.5 py-0.5 hover:bg-surface-soft rounded-md transition-colors"
+            >
+              ✕
+            </button>
+          </div>
+        </>
+      )}
+    </>
   );
 }

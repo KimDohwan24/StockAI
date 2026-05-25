@@ -43,4 +43,14 @@ public class NotificationController {
         notificationService.readAll(userDetails.getUsername());
         return ResponseEntity.ok().build();
     }
+
+    @DeleteMapping
+    public ResponseEntity<Void> clearNotifications(
+            @AuthenticationPrincipal UserDetails userDetails) {
+        if (userDetails == null) {
+            return ResponseEntity.status(401).build();
+        }
+        notificationService.clearAll(userDetails.getUsername());
+        return ResponseEntity.ok().build();
+    }
 }

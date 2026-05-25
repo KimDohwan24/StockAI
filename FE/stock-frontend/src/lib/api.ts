@@ -624,6 +624,12 @@ export async function readAllNotifications(): Promise<void> {
   });
 }
 
+export async function clearAllNotifications(): Promise<void> {
+  await fetcher<void>(`${API_BASE_URL}/api/notifications`, {
+    method: 'DELETE',
+  });
+}
+
 // ═══════════════════════════════════════════════════════════
 //  Basket (Shopping Cart) APIs
 // ═══════════════════════════════════════════════════════════

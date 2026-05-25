@@ -44,4 +44,11 @@ public class NotificationService {
         }
         notificationRepository.saveAll(notifications);
     }
+
+    @Transactional
+    public void clearAll(String email) {
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new IllegalArgumentException("사용자를 찾을 수 없습니다: " + email));
+        notificationRepository.deleteAllByUserId(user.getId());
+    }
 }

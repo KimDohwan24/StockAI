@@ -24,6 +24,7 @@ import {
   getNotifications,
   getUnreadNotificationCount,
   readAllNotifications,
+  getBasketItems,
 } from '@/lib/api';
 import StockSearchBar from '@/components/stocks/StockSearchBar';
 import OverseasStockSearchBar from '@/components/overseas/OverseasStockSearchBar';
@@ -76,6 +77,13 @@ export default function Navbar() {
     getNotifications,
     { revalidateOnFocus: true, refreshInterval: 15000 }
   );
+
+  const { data: basketItems } = useSWR(
+    isAuthenticated ? 'user-basket-items' : null,
+    getBasketItems,
+    { revalidateOnFocus: true, refreshInterval: 30000 }
+  );
+  const basketCount = basketItems?.length ?? 0;
 
   const handleRemoveFavorite = async (e: React.MouseEvent, stockCode: string) => {
     e.preventDefault();
@@ -344,8 +352,13 @@ export default function Navbar() {
 
           {/* 3. 장바구니 (Shopping Cart) */}
           {isAuthenticated && (
-            <Link href="/" className="p-2 text-steel active:text-ink transition-colors relative">
+            <Link href="/basket" className="p-2 text-steel active:text-ink hover:text-meta-blue transition-colors relative" title="장바구니">
               <ShoppingCart className="w-5 h-5" />
+              {basketCount > 0 && (
+                <span className="absolute top-1 right-1 min-w-[16px] h-4 bg-meta-blue text-white text-[9px] font-bold rounded-full flex items-center justify-center px-1">
+                  {basketCount}
+                </span>
+              )}
             </Link>
           )}
 

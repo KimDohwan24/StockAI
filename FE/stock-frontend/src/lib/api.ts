@@ -623,3 +623,67 @@ export async function readAllNotifications(): Promise<void> {
     method: 'POST',
   });
 }
+
+// ═══════════════════════════════════════════════════════════
+//  Basket (Shopping Cart) APIs
+// ═══════════════════════════════════════════════════════════
+
+export interface BasketItemResponse {
+  id: number;
+  userId: number;
+  stockCode: string;
+  stockName: string;
+  targetPrice: number;
+  weight: number;
+  active: boolean;
+  createdAt: string;
+}
+
+export interface BacktestChartPoint {
+  date: string;
+  returnValue: number;
+}
+
+export interface BacktestResponse {
+  chartData: BacktestChartPoint[];
+  finalReturn: number;
+  mdd: number;
+  aiAdvice: string;
+}
+
+export async function getBasketItems(): Promise<BasketItemResponse[]> {
+  return fetcher<BasketItemResponse[]>(`${API_BASE_URL}/api/baskets`);
+}
+
+export async function addBasketItem(stockCode: string, targetPrice: number, weight: number): Promise<BasketItemResponse> {
+  return fetcher<BasketItemResponse>(`${API_BASE_URL}/api/baskets`, {
+    method: 'POST',
+    body: JSON.stringify({ stockCode, targetPrice, weight }),
+  });
+}
+
+export async function updateBasketItem(id: number, targetPrice: number, weight: number): Promise<BasketItemResponse> {
+  return fetcher<BasketItemResponse>(`${API_BASE_URL}/api/baskets/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify({ targetPrice, weight }),
+  });
+}
+
+export async function deleteBasketItem(id: number): Promise<void> {
+  await fetcher<void>(`${API_BASE_URL}/api/baskets/${id}`, {
+    method: 'DELETE',
+  });
+}
+
+export async function toggleBasketItemActive(id: number): Promise<BasketItemResponse> {
+  return fetcher<BasketItemResponse>(`${API_BASE_URL}/api/baskets/${id}/toggle-active`, {
+    method: 'POST',
+  });
+}
+
+export async function runBacktest(items: { stockCode: string; targetPrice: number; weight: number }[]): Promise<BacktestResponse> {
+  return fetcher<BacktestResponse>(`${API_BASE_URL}/api/baskets/backtest`, {
+    method: 'POST',
+    body: JSON.stringify({ items }),
+  });
+}

@@ -43,6 +43,24 @@ public class AdminController {
         adminService.toggleUserMockOrder(email, enabled);
         return ResponseEntity.ok().build();
     }
+
+    @PostMapping("/users/{email}/ai-trading")
+    public ResponseEntity<Void> toggleUserAiTrading(@PathVariable String email, @RequestParam boolean enabled) {
+        adminService.toggleUserAiTrading(email, enabled);
+        return ResponseEntity.ok().build();
+    }
+
+    @PostMapping("/users/{email}/initial-balance")
+    public ResponseEntity<Void> updateUserInitialBalance(@PathVariable String email, @RequestParam double balance) {
+        adminService.updateUserInitialBalance(email, balance);
+        return ResponseEntity.ok().build();
+    }
+
+    @PostMapping("/news/sync")
+    public ResponseEntity<Integer> syncNaverNews() {
+        int count = adminService.syncNaverNews();
+        return ResponseEntity.ok(count);
+    }
 }
 
 

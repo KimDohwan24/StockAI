@@ -18,12 +18,24 @@ public class KisConfig {
     private String websocketUrl;
     private Account account;
     private boolean mockOrderEnabled = true;
+    private Mock mock;
 
     @Getter
     @Setter
     public static class Account {
         private String cano;
         private String acntPrdtCd;
+    }
+
+    @Getter
+    @Setter
+    public static class Mock {
+        private String baseUrl;
+        private String oauthUrl;
+        private String appkey;
+        private String appsecret;
+        private String websocketUrl;
+        private Account account;
     }
 
     public String getAccountNo() {

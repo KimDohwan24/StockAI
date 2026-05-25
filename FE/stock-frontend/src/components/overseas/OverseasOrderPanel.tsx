@@ -5,6 +5,7 @@ import useSWR, { mutate } from 'swr';
 import { buyOverseasStock, sellOverseasStock, getOverseasBalance } from '@/services/overseasStockApi';
 import { useAuth } from '@/lib/auth';
 import type { ExchangeCode } from '@/types/overseasStock';
+import { getPortfolio } from '@/lib/api';
 
 interface OverseasOrderPanelProps {
   ticker: string;
@@ -32,18 +33,35 @@ export default function OverseasOrderPanel({
     { refreshInterval: 30000, dedupingInterval: 10000 }
   );
 
+  const { data: portfolio } = useSWR(
+    isAuthenticated ? 'dashboard-portfolio' : null,
+    () => getPortfolio(),
+    { dedupingInterval: 30000, revalidateOnFocus: false }
+  );
+
   const userHolding = useMemo(
     () => balanceData?.output1?.find((h) => h.ticker === ticker && h.exchangeCode === exchangeCode) ?? null,
     [balanceData, ticker, exchangeCode]
   );
 
+  const maxPurchasableQty = useMemo(() => {
+    const cash = portfolio?.cashBalance ?? 0;
+    return price > 0 ? Math.floor(cash / price) : 0;
+  }, [portfolio?.cashBalance, price]);
+
   const clampQuantity = useCallback(
     (val: number, currentSide: 'buy' | 'sell') => {
-      const maxQty = currentSide === 'sell' ? (userHolding?.quantity ?? 0) : Infinity;
-      const minQty = currentSide === 'sell' && (userHolding?.quantity ?? 0) === 0 ? 0 : 1;
-      return Math.max(minQty, Math.min(val, maxQty));
+      if (currentSide === 'sell') {
+        const maxQty = userHolding?.quantity ?? 0;
+        const minQty = maxQty === 0 ? 0 : 1;
+        return Math.max(minQty, Math.min(val, maxQty));
+      } else {
+        const maxQty = maxPurchasableQty;
+        const minQty = maxQty === 0 ? 0 : 1;
+        return Math.max(minQty, Math.min(val, maxQty));
+      }
     },
-    [userHolding]
+    [userHolding, maxPurchasableQty]
   );
 
   const finalQuantity = useMemo(() => clampQuantity(quantity, side), [clampQuantity, quantity, side]);
@@ -65,6 +83,7 @@ export default function OverseasOrderPanel({
         text: `${side === 'buy' ? '매수' : '매도'} 완료: ${ticker} ${finalQuantity}주 @ ${price.toLocaleString('en-US', { minimumFractionDigits: 2 })} ${currency}`,
       });
       mutate('overseas-balance');
+      mutate('dashboard-portfolio');
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : '주문에 실패했습니다.';
       setOrderMsg({ type: 'error', text: msg });
@@ -154,6 +173,18 @@ export default function OverseasOrderPanel({
             +
           </button>
         </div>
+        {side === 'buy' && portfolio && (
+          <div className="flex justify-between items-center mt-1.5 px-1 text-xs">
+            <span className="text-steel">보유 금액: {portfolio.cashBalance.toLocaleString('ko-KR')}원</span>
+            <span className="text-meta-blue font-semibold">최대 {maxPurchasableQty}주 구매 가능</span>
+          </div>
+        )}
+        {side === 'sell' && (
+          <div className="flex justify-between items-center mt-1.5 px-1 text-xs">
+            <span className="text-steel">보유 수량: {userHolding?.quantity ?? 0}주</span>
+            <span className="text-meta-blue font-semibold">최대 {userHolding?.quantity ?? 0}주 매도 가능</span>
+          </div>
+        )}
       </div>
 
       <div>

@@ -14,6 +14,7 @@ import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.format.DateTimeFormatter;
 import java.util.List;
@@ -133,8 +134,52 @@ public class OverseasStockCatalogService {
                 log.error("Failed to sync exchange {}: {}", exchangeCode, e.getMessage(), e);
             }
         }
+        if (totalSynced == 0) {
+            totalSynced = seedFallbackOverseasStocks();
+        }
         log.info("Overseas stock master sync completed. Total synced: {}", totalSynced);
         return totalSynced;
+    }
+
+    @Transactional
+    public int seedFallbackOverseasStocks() {
+        log.warn("Entering fallback seeding for overseas stocks due to KIS API sync failure...");
+        List<OverseasStockMaster> fallbackStocks = List.of(
+            createFallbackOverseasStock("AAPL", "Apple Inc.", ExchangeCode.NAS, "미국", "IT", "USD", "189.84", "2.15", "2", "1.15", "52981023"),
+            createFallbackOverseasStock("MSFT", "Microsoft Corp.", ExchangeCode.NAS, "미국", "IT", "USD", "421.90", "4.50", "2", "1.08", "21980312"),
+            createFallbackStock("TSLA", "Tesla Inc.", ExchangeCode.NAS, "미국", "자동차", "USD", "179.24", "-3.15", "5", "-1.73", "89102391"),
+            createFallbackStock("NVDA", "NVIDIA Corp.", ExchangeCode.NAS, "미국", "반도체", "USD", "942.50", "22.40", "2", "2.43", "48102931"),
+            createFallbackStock("GOOGL", "Alphabet Inc.", ExchangeCode.NAS, "미국", "IT", "USD", "173.50", "0.85", "2", "0.49", "29102391"),
+            createFallbackStock("AMZN", "Amazon.com Inc.", ExchangeCode.NAS, "미국", "유통", "USD", "180.20", "-1.10", "5", "-0.61", "35102931"),
+            createFallbackStock("META", "Meta Platforms Inc.", ExchangeCode.NAS, "미국", "IT", "USD", "475.40", "5.20", "2", "1.11", "18290312"),
+            createFallbackStock("NKE", "Nike Inc.", ExchangeCode.NYS, "미국", "자유소비재", "USD", "92.10", "0.45", "2", "0.49", "7820192"),
+            createFallbackStock("DIS", "Walt Disney Co.", ExchangeCode.NYS, "미국", "서비스", "USD", "102.50", "-0.80", "5", "-0.77", "9102391"),
+            createFallbackStock("KO", "Coca-Cola Co.", ExchangeCode.NYS, "미국", "필수소비재", "USD", "62.40", "0.20", "2", "0.32", "12901239")
+        );
+
+        int count = 0;
+        for (OverseasStockMaster stock : fallbackStocks) {
+            if (overseasStockMasterRepository.findByTickerAndExchangeCode(stock.getTicker(), stock.getExchangeCode()).isEmpty()) {
+                overseasStockMasterRepository.save(stock);
+                count++;
+            }
+        }
+        log.info("Fallback seeding completed. Seeded {} overseas stocks", count);
+        return count;
+    }
+
+    private OverseasStockMaster createFallbackOverseasStock(String ticker, String name, ExchangeCode exchangeCode,
+                                                            String country, String sector, String currency,
+                                                            String price, String change, String sign, String rate, String vol) {
+        OverseasStockMaster stock = new OverseasStockMaster(ticker, name, exchangeCode, country, sector, currency);
+        stock.updatePrice(price, change, sign, rate, vol);
+        return stock;
+    }
+
+    private OverseasStockMaster createFallbackStock(String ticker, String name, ExchangeCode exchangeCode,
+                                                    String country, String sector, String currency,
+                                                    String price, String change, String sign, String rate, String vol) {
+        return createFallbackOverseasStock(ticker, name, exchangeCode, country, sector, currency, price, change, sign, rate, vol);
     }
 
     private OverseasStockCatalogResponse toResponse(OverseasStockMaster stock) {

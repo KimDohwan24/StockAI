@@ -28,6 +28,7 @@ import {
 } from 'lucide-react';
 import OverseasBalanceTable from '@/components/overseas/OverseasBalanceTable';
 import Link from 'next/link';
+import { resolveStockName } from '@/lib/stockMap';
 
 function fmt(n: number): string {
   if (n === null || n === undefined || isNaN(n)) return '0';
@@ -374,7 +375,9 @@ export default function ProfilePage() {
                         <tr key={h.id} className="border-b border-hairline-soft last:border-b-0 hover:bg-surface-soft/40 transition-colors">
                           <td className="px-6 py-4">
                             <Link href={`/stock/${h.stockCode}`} className="hover:text-meta-blue transition-colors group">
-                              <p className="font-bold text-ink group-hover:text-meta-blue">{h.stockName}</p>
+                              <p className="font-bold text-ink group-hover:text-meta-blue">
+                                {resolveStockName(h.stockCode, h.stockName)}
+                              </p>
                               <p className="text-xs text-steel mt-0.5">{h.stockCode}</p>
                             </Link>
                           </td>
@@ -434,7 +437,9 @@ export default function ProfilePage() {
                           </td>
                           <td className="px-6 py-4">
                             <Link href={`/stock/${item.ticker}`} className="hover:text-meta-blue transition-colors group">
-                              <p className="font-bold text-ink group-hover:text-meta-blue">{item.stockName}</p>
+                              <p className="font-bold text-ink group-hover:text-meta-blue">
+                                {resolveStockName(item.ticker, item.stockName)}
+                              </p>
                               <p className="text-xs text-steel mt-0.5">{item.ticker}</p>
                             </Link>
                           </td>

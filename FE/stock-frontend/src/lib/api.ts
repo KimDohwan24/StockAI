@@ -396,6 +396,8 @@ export interface StockNewsItem {
   sentiment: 'positive' | 'negative' | 'neutral';
   sentimentScore: number;
   confidence: number;
+  stockCode?: string;
+  stockName?: string;
 }
 
 export interface StockAiAnalysisResponse {
@@ -428,6 +430,11 @@ export async function getStockAiAnalysis(stockCode: string): Promise<StockAiAnal
 /** GET /api/v1/stocks/recommendations?market={market} */
 export async function getDashboardRecommendations(market: 'DOMESTIC' | 'OVERSEAS'): Promise<DashboardRecommendations> {
   return fetcher<DashboardRecommendations>(`${API_BASE_URL}/api/v1/stocks/recommendations?market=${market}`);
+}
+
+/** GET /api/v1/stocks/news - AI가 분석한 수집 뉴스 모음 조회 */
+export async function getAiNewsList(): Promise<StockNewsItem[]> {
+  return fetcher<StockNewsItem[]>(`${API_BASE_URL}/api/v1/stocks/news`);
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -519,6 +526,12 @@ export async function toggleUserMockOrder(email: string, enabled: boolean): Prom
   });
 }
 
+export async function toggleUserAiTrading(email: string, enabled: boolean): Promise<void> {
+  await fetcher<void>(`${API_BASE_URL}/api/admin/users/${email}/ai-trading?enabled=${enabled}`, {
+    method: 'POST',
+  });
+}
+
 
 
 
@@ -532,4 +545,81 @@ export interface SystemConfigResponse {
 
 export async function getSystemConfig(): Promise<SystemConfigResponse> {
   return fetcher<SystemConfigResponse>(`${API_BASE_URL}/api/v1/stocks/config`);
+}
+
+export async function syncDomesticStocks(): Promise<number> {
+  return fetcher<number>(`${API_BASE_URL}/api/stocks/sync`, {
+    method: 'POST',
+  });
+}
+
+export async function syncOverseasStocks(): Promise<number> {
+  return fetcher<number>(`${API_BASE_URL}/api/overseas-stocks/sync`, {
+    method: 'POST',
+  });
+}
+
+export async function syncNaverNews(): Promise<number> {
+  return fetcher<number>(`${API_BASE_URL}/api/admin/news/sync`, {
+    method: 'POST',
+  });
+}
+
+export async function updateUserInitialBalance(email: string, balance: number): Promise<void> {
+  await fetcher<void>(`${API_BASE_URL}/api/admin/users/${email}/initial-balance?balance=${balance}`, {
+    method: 'POST',
+  });
+}
+
+// ═══════════════════════════════════════════════════════════
+//  Favorites APIs
+// ═══════════════════════════════════════════════════════════
+
+export interface FavoriteStockResponse {
+  stockCode: string;
+  stockName: string;
+  currentPrice: string;
+  changeValue: string;
+  changeRate: string;
+  changeSign: string;
+}
+
+export async function getFavorites(): Promise<FavoriteStockResponse[]> {
+  return fetcher<FavoriteStockResponse[]>(`${API_BASE_URL}/api/favorites`);
+}
+
+export async function getFavoriteStatus(stockCode: string): Promise<{ favorited: boolean }> {
+  return fetcher<{ favorited: boolean }>(`${API_BASE_URL}/api/favorites/${stockCode}/status`);
+}
+
+export async function toggleFavorite(stockCode: string): Promise<{ favorited: boolean }> {
+  return fetcher<{ favorited: boolean }>(`${API_BASE_URL}/api/favorites/${stockCode}/toggle`, {
+    method: 'POST',
+  });
+}
+
+// ═══════════════════════════════════════════════════════════
+//  Notification APIs
+// ═══════════════════════════════════════════════════════════
+
+export interface NotificationResponse {
+  id: number;
+  userId: number;
+  message: string;
+  read: boolean;
+  createdAt: string;
+}
+
+export async function getNotifications(): Promise<NotificationResponse[]> {
+  return fetcher<NotificationResponse[]>(`${API_BASE_URL}/api/notifications`);
+}
+
+export async function getUnreadNotificationCount(): Promise<{ count: number }> {
+  return fetcher<{ count: number }>(`${API_BASE_URL}/api/notifications/unread-count`);
+}
+
+export async function readAllNotifications(): Promise<void> {
+  await fetcher<void>(`${API_BASE_URL}/api/notifications/read-all`, {
+    method: 'POST',
+  });
 }

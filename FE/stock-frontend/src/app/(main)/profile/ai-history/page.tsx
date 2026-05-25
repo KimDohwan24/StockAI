@@ -16,6 +16,7 @@ import {
   DollarSign,
 } from 'lucide-react';
 import Link from 'next/link';
+import { resolveStockName } from '@/lib/stockMap';
 
 // Number formatter
 function fmt(n: number): string {
@@ -283,7 +284,9 @@ export default function AiHistoryPage() {
                     <div className="space-y-1">
                       <div className="flex items-center gap-2">
                         <Link href={`/stock/${item.ticker}`} className="hover:text-meta-blue transition-colors">
-                          <h3 className="font-bold text-lg text-ink inline-block hover:underline">{item.stockName}</h3>
+                          <h3 className="font-bold text-lg text-ink inline-block hover:underline">
+                            {resolveStockName(item.ticker, item.stockName)}
+                          </h3>
                         </Link>
                         <span className="text-xs text-steel font-medium bg-surface-soft px-2 py-0.5 rounded-md">
                           {item.ticker}

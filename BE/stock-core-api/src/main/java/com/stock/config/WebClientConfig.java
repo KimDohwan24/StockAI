@@ -43,6 +43,26 @@ public class WebClientConfig {
                 .build();
     }
 
+    @Bean("kisMockWebClient")
+    public WebClient kisMockWebClient(KisConfig kisConfig, ConnectionProvider kisConnectionProvider) {
+        HttpClient httpClient = HttpClient.create(kisConnectionProvider)
+                .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 10000)
+                .responseTimeout(Duration.ofSeconds(10));
+
+        String mockBaseUrl = kisConfig.getMock() != null ? kisConfig.getMock().getBaseUrl() : kisConfig.getBaseUrl();
+        String mockAppkey = kisConfig.getMock() != null ? kisConfig.getMock().getAppkey() : kisConfig.getAppkey();
+        String mockAppsecret = kisConfig.getMock() != null ? kisConfig.getMock().getAppsecret() : kisConfig.getAppsecret();
+
+        return WebClient.builder()
+                .baseUrl(mockBaseUrl)
+                .clientConnector(new ReactorClientHttpConnector(httpClient))
+                .defaultHeader("Content-Type", "application/json; charset=utf-8")
+                .defaultHeader("appkey", mockAppkey)
+                .defaultHeader("appsecret", mockAppsecret)
+                .defaultHeader("custtype", "P")
+                .build();
+    }
+
     @Bean("kisOAuthWebClient")
     public WebClient kisOAuthWebClient(KisConfig kisConfig, ConnectionProvider kisConnectionProvider) {
         HttpClient httpClient = HttpClient.create(kisConnectionProvider)
@@ -51,6 +71,21 @@ public class WebClientConfig {
 
         return WebClient.builder()
                 .baseUrl(kisConfig.getOauthUrl())
+                .clientConnector(new ReactorClientHttpConnector(httpClient))
+                .defaultHeader("Content-Type", "application/json; charset=utf-8")
+                .build();
+    }
+
+    @Bean("kisMockOAuthWebClient")
+    public WebClient kisMockOAuthWebClient(KisConfig kisConfig, ConnectionProvider kisConnectionProvider) {
+        HttpClient httpClient = HttpClient.create(kisConnectionProvider)
+                .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 5000)
+                .responseTimeout(Duration.ofSeconds(5));
+
+        String mockOauthUrl = kisConfig.getMock() != null ? kisConfig.getMock().getOauthUrl() : kisConfig.getOauthUrl();
+
+        return WebClient.builder()
+                .baseUrl(mockOauthUrl)
                 .clientConnector(new ReactorClientHttpConnector(httpClient))
                 .defaultHeader("Content-Type", "application/json; charset=utf-8")
                 .build();

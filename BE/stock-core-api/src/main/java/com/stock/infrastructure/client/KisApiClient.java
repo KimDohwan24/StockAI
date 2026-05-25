@@ -27,6 +27,7 @@ public class KisApiClient {
     private final KisAuthService kisAuthService;
     private final ObjectMapper objectMapper;
     private final WebClient kisWebClient;
+    private final WebClient kisMockWebClient;
     private final RateLimiter rateLimiter = RateLimiter.create(3.0);
     private static final int MAX_RETRY = 3;
     private static final long BASE_RETRY_DELAY_MS = 1100;
@@ -34,11 +35,13 @@ public class KisApiClient {
     public KisApiClient(KisConfig kisConfig,
                         KisAuthService kisAuthService,
                         ObjectMapper objectMapper,
-                        @Qualifier("kisWebClient") WebClient kisWebClient) {
+                        @Qualifier("kisWebClient") WebClient kisWebClient,
+                        @Qualifier("kisMockWebClient") WebClient kisMockWebClient) {
         this.kisConfig = kisConfig;
         this.kisAuthService = kisAuthService;
         this.objectMapper = objectMapper;
         this.kisWebClient = kisWebClient;
+        this.kisMockWebClient = kisMockWebClient;
     }
 
     private String getAuthHeader() {
@@ -181,10 +184,10 @@ public class KisApiClient {
 
     private OrderResponse placeOrder(String trId, OrderRequest request) {
         rateLimiter.acquire();
-        KisApiResponse<OrderResponse> response = kisWebClient
+        KisApiResponse<OrderResponse> response = kisMockWebClient
                 .post()
                 .uri("/uapi/domestic-stock/v1/trading/order-cash")
-                .header("authorization", getAuthHeader())
+                .header("authorization", kisAuthService.getMockAccessToken())
                 .header("tr_id", trId)
                 .contentType(MediaType.APPLICATION_JSON)
                 .bodyValue(request)
@@ -207,10 +210,10 @@ public class KisApiClient {
     public OrderResponse amendCancelOrder(OrderRequest request) {
         rateLimiter.acquire();
         String trId = "VTTC0803U"; // 모의투자 정정취소
-        KisApiResponse<OrderResponse> response = kisWebClient
+        KisApiResponse<OrderResponse> response = kisMockWebClient
                 .post()
                 .uri("/uapi/domestic-stock/v1/trading/order-rvsecncl")
-                .header("authorization", getAuthHeader())
+                .header("authorization", kisAuthService.getMockAccessToken())
                 .header("tr_id", trId)
                 .contentType(MediaType.APPLICATION_JSON)
                 .bodyValue(request)
@@ -235,9 +238,17 @@ public class KisApiClient {
     public BalanceResponse getBalance() {
         rateLimiter.acquire();
         String trId = "VTTC8434R"; // 모의투자
+
+        String mockCano = (kisConfig.getMock() != null && kisConfig.getMock().getAccount() != null)
+                ? kisConfig.getMock().getAccount().getCano()
+                : kisConfig.getAccountNo();
+        String mockAcntPrdtCd = (kisConfig.getMock() != null && kisConfig.getMock().getAccount() != null)
+                ? kisConfig.getMock().getAccount().getAcntPrdtCd()
+                : kisConfig.getAccountProductCode();
+
         String uri = UriComponentsBuilder.fromUriString("/uapi/domestic-stock/v1/trading/inquire-balance")
-                .queryParam("CANO", kisConfig.getAccountNo())
-                .queryParam("ACNT_PRDT_CD", kisConfig.getAccountProductCode())
+                .queryParam("CANO", mockCano)
+                .queryParam("ACNT_PRDT_CD", mockAcntPrdtCd)
                 .queryParam("AFHR_FLPR_YN", "N")
                 .queryParam("OFL_YN", "")
                 .queryParam("INQR_DVSN", "01")
@@ -249,10 +260,10 @@ public class KisApiClient {
                 .queryParam("CTX_AREA_NK100", "")
                 .toUriString();
 
-        BalanceResponse response = kisWebClient
+        BalanceResponse response = kisMockWebClient
                 .get()
                 .uri(uri)
-                .header("authorization", getAuthHeader())
+                .header("authorization", kisAuthService.getMockAccessToken())
                 .header("tr_id", trId)
                 .retrieve()
                 .onStatus(status -> status.isError(),
@@ -463,6 +474,7 @@ public class KisApiClient {
                                             }))
                             .bodyToMono(JsonNode.class)
                             .block();
+                    log.info("KIS stock master response: {}", root);
                     break;
                 } catch (Exception e) {
                     if (retry < 4 && (e.getMessage() != null && e.getMessage().contains("EGW00201"))) {
@@ -534,6 +546,7 @@ public class KisApiClient {
                                             }))
                             .bodyToMono(JsonNode.class)
                             .block();
+                    log.info("KIS overseas stock master response: {}", root);
                     break;
                 } catch (Exception e) {
                     if (retry < 4 && (e.getMessage() != null && e.getMessage().contains("EGW00201"))) {

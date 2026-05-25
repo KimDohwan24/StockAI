@@ -50,4 +50,13 @@ kis:
     acnt_prdt_cd: ${KIS_ACCOUNT_ACNT_PRDT_CD}
   websocket-url: ${KIS_WEBSOCKET_URL}
   mock-order-enabled: ${KIS_MOCK_ORDER_ENABLED:true}
+  mock:
+    base-url: ${KIS_MOCK_BASE_URL}
+    oauth-url: ${KIS_MOCK_OAUTH_URL}
+    appkey: ${KIS_MOCK_APPKEY}
+    appsecret: ${KIS_MOCK_APPSECRET}
+    account:
+      cano: ${KIS_MOCK_ACCOUNT_CANO}
+      acnt_prdt_cd: ${KIS_MOCK_ACCOUNT_ACNT_PRDT_CD:01}
+    websocket-url: ${KIS_MOCK_WEBSOCKET_URL}
 

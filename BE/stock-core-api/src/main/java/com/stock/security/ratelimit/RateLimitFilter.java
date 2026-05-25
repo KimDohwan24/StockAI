@@ -82,8 +82,8 @@ public class RateLimitFilter extends OncePerRequestFilter {
         if (path.equals("/api/overseas-stocks")) return 120;
         if (path.startsWith("/api/overseas-stocks/search")) return 120;
         if (path.startsWith("/api/overseas-stocks/sectors")) return 120;
-        if (path.startsWith("/api/auth/login")) return 10;
-        if (path.startsWith("/api/auth/signup")) return 5;
+        if (path.startsWith("/api/auth/login")) return 60;
+        if (path.startsWith("/api/auth/signup")) return 30;
         if (path.startsWith("/api/ws/register")) return 30;
         if (path.startsWith("/api/ws/subscribe") || path.startsWith("/api/ws/unsubscribe")) return 120;
         if (path.equals("/api/stocks/prices")) return 100;

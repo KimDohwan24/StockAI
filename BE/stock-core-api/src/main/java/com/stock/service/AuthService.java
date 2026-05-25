@@ -45,9 +45,14 @@ public class AuthService {
     }
 
     public TokenResponse login(LoginRequest request) {
-        Authentication authentication = authenticationManager.authenticate(
-                new UsernamePasswordAuthenticationToken(request.getEmail(), request.getPassword())
-        );
+        Authentication authentication;
+        try {
+            authentication = authenticationManager.authenticate(
+                    new UsernamePasswordAuthenticationToken(request.getEmail(), request.getPassword())
+            );
+        } catch (org.springframework.security.core.AuthenticationException e) {
+            throw new IllegalArgumentException("이메일(아이디) 또는 비밀번호가 올바르지 않습니다.");
+        }
 
         String role = authentication.getAuthorities().stream()
                 .findFirst()

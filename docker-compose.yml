@@ -1,0 +1,162 @@
+version: '3.8'
+
+services:
+  # =========================================================================
+  # 1. Database Service (PostgreSQL 16)
+  # =========================================================================
+  db:
+    image: postgres:16-alpine
+    container_name: stock-db
+    ports:
+      - "${POSTGRES_PORT_HOST:-5432}:5432"
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: always
+    networks:
+      - stock-network
+
+  # =========================================================================
+  # 2. Caching Service (Redis)
+  # =========================================================================
+  redis:
+    image: redis:7-alpine
+    container_name: stock-redis
+    ports:
+      - "${REDIS_PORT_HOST:-6379}:6379"
+    command: redis-server --requirepass ${REDIS_PASSWORD}
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: always
+    networks:
+      - stock-network
+
+  # =========================================================================
+  # 3. AI NLP Server (FastAPI / Uvicorn)
+  # =========================================================================
+  stock-ai-server:
+    build:
+      context: ./BE/stock-ai-server
+      dockerfile: Dockerfile
+    container_name: stock-ai-server
+    ports:
+      - "${AI_PORT_HOST:-8000}:8000"
+    environment:
+      DATABASE_URL: ${AI_DATABASE_URL}
+      REDIS_URL: ${AI_REDIS_URL}
+      SPRING_BOOT_URL: ${SPRING_BOOT_URL}
+      MODEL_NAME: ${MODEL_NAME}
+      MODEL_DEVICE: ${MODEL_DEVICE}
+      NAVER_CLIENT_ID: ${NAVER_CLIENT_ID}
+      NAVER_CLIENT_SECRET: ${NAVER_CLIENT_SECRET}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
+      OPENROUTER_MODEL: ${OPENROUTER_MODEL}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: always
+    networks:
+      - stock-network
+
+  # =========================================================================
+  # 4. Core Backend Engine (Spring Boot)
+  # =========================================================================
+  stock-core-api:
+    build:
+      context: ./BE/stock-core-api
+      dockerfile: Dockerfile
+    container_name: stock-core-api
+    develop:
+      watch:
+        - action: rebuild
+          path: ./BE/stock-core-api
+          ignore:
+            - BE/stock-core-api/build/
+            - BE/stock-core-api/.gradle/
+            - BE/stock-core-api/bin/
+    ports:
+      - "${SPRING_PORT_HOST:-8080}:8080"
+    environment:
+      SPRING_DATASOURCE_URL: ${SPRING_DATASOURCE_URL}
+      SPRING_DATASOURCE_USERNAME: ${SPRING_DATASOURCE_USERNAME}
+      SPRING_DATASOURCE_PASSWORD: ${SPRING_DATASOURCE_PASSWORD}
+      SPRING_JPA_HIBERNATE_DDL_AUTO: ${SPRING_JPA_HIBERNATE_DDL_AUTO}
+      SPRING_JPA_SHOW_SQL: ${SPRING_JPA_SHOW_SQL}
+      REDIS_HOST: ${REDIS_HOST}
+      REDIS_PORT: ${REDIS_PORT}
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      SERVER_PORT: ${SERVER_PORT}
+      APP_AI_SERVER_URL: ${APP_AI_SERVER_URL}
+      APP_JWT_SECRET: ${APP_JWT_SECRET}
+      APP_JWT_EXPIRATION: ${APP_JWT_EXPIRATION}
+      KIS_BASE_URL: ${KIS_BASE_URL}
+      KIS_OAUTH_URL: ${KIS_OAUTH_URL}
+      KIS_APPKEY: ${KIS_APPKEY}
+      KIS_APPSECRET: ${KIS_APPSECRET}
+      KIS_ACCOUNT_CANO: ${KIS_ACCOUNT_CANO}
+      KIS_ACCOUNT_ACNT_PRDT_CD: ${KIS_ACCOUNT_ACNT_PRDT_CD}
+      KIS_WEBSOCKET_URL: ${KIS_WEBSOCKET_URL}
+      KIS_MOCK_ORDER_ENABLED: ${KIS_MOCK_ORDER_ENABLED}
+      KIS_MOCK_BASE_URL: ${KIS_MOCK_BASE_URL}
+      KIS_MOCK_OAUTH_URL: ${KIS_MOCK_OAUTH_URL}
+      KIS_MOCK_APPKEY: ${KIS_MOCK_APPKEY}
+      KIS_MOCK_APPSECRET: ${KIS_MOCK_APPSECRET}
+      KIS_MOCK_ACCOUNT_CANO: ${KIS_MOCK_ACCOUNT_CANO}
+      KIS_MOCK_ACCOUNT_ACNT_PRDT_CD: ${KIS_MOCK_ACCOUNT_ACNT_PRDT_CD}
+      KIS_MOCK_WEBSOCKET_URL: ${KIS_MOCK_WEBSOCKET_URL}
+      Naver_Client_ID: ${Naver_Client_ID}
+      Naver_Client_Secret: ${Naver_Client_Secret}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      stock-ai-server:
+        condition: service_started
+    restart: always
+    networks:
+      - stock-network
+
+  # =========================================================================
+  # 5. Frontend Interactive Portal (Next.js 16)
+  # =========================================================================
+  stock-frontend:
+    build:
+      context: ./FE/stock-frontend
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL}
+    container_name: stock-frontend
+    ports:
+      - "${FRONTEND_PORT_HOST:-3000}:3000"
+    environment:
+      NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL}
+    depends_on:
+      - stock-core-api
+    restart: always
+    networks:
+      - stock-network
+
+# -------------------------------------------------------------------------
+# Network & Volume Definitions
+# -------------------------------------------------------------------------
+networks:
+  stock-network:
+    driver: bridge
+
+volumes:
+  pgdata:
+    driver: local

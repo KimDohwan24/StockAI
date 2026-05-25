@@ -12,6 +12,8 @@ import com.stock.domain.stock.StockMasterRepository;
 import com.stock.infrastructure.client.KisApiClient;
 import com.stock.infrastructure.dto.kis.OrderRequest;
 import com.stock.infrastructure.dto.kis.OrderResponse;
+import com.stock.domain.notification.Notification;
+import com.stock.domain.notification.NotificationRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -26,6 +28,32 @@ public class StockOrderService {
     private final PortfolioRepository portfolioRepository;
     private final StockMasterRepository stockMasterRepository;
     private final OrderHistoryRepository orderHistoryRepository;
+    private final NotificationRepository notificationRepository;
+
+    private static final java.util.Map<String, String> STOCK_NAME_FALLBACK = java.util.Map.ofEntries(
+            java.util.Map.entry("005930", "삼성전자"),
+            java.util.Map.entry("000660", "SK하이닉스"),
+            java.util.Map.entry("035420", "네이버"),
+            java.util.Map.entry("035720", "카카오"),
+            java.util.Map.entry("005380", "현대차"),
+            java.util.Map.entry("373220", "LG에너지솔루션"),
+            java.util.Map.entry("068270", "셀트리온"),
+            java.util.Map.entry("000270", "기아"),
+            java.util.Map.entry("AAPL", "애플"),
+            java.util.Map.entry("TSLA", "테슬라"),
+            java.util.Map.entry("MSFT", "마이크로소프트"),
+            java.util.Map.entry("NVDA", "엔비디아"),
+            java.util.Map.entry("AMZN", "아마존"),
+            java.util.Map.entry("GOOGL", "구글"),
+            java.util.Map.entry("META", "메타"),
+            java.util.Map.entry("NFLX", "넷플릭스")
+    );
+
+    private String resolveStockName(String stockCode) {
+        return stockMasterRepository.findByStockCode(stockCode)
+                .map(com.stock.domain.stock.StockMaster::getName)
+                .orElseGet(() -> STOCK_NAME_FALLBACK.getOrDefault(stockCode, stockCode));
+    }
 
     @Transactional
     public OrderResponse buy(String email, String stockCode, int quantity, int price, String orderedBy) {
@@ -46,9 +74,16 @@ public class StockOrderService {
         // 2. Perform external KIS Mock Order call (conditional)
         OrderResponse response;
         if (user.isMockOrderEnabled()) {
+            String mockCano = (kisConfig.getMock() != null && kisConfig.getMock().getAccount() != null)
+                    ? kisConfig.getMock().getAccount().getCano()
+                    : kisConfig.getAccountNo();
+            String mockAcntPrdtCd = (kisConfig.getMock() != null && kisConfig.getMock().getAccount() != null)
+                    ? kisConfig.getMock().getAccount().getAcntPrdtCd()
+                    : kisConfig.getAccountProductCode();
+
             OrderRequest request = OrderRequest.forMockBuy(
-                    kisConfig.getAccountNo(),
-                    kisConfig.getAccountProductCode(),
+                    mockCano,
+                    mockAcntPrdtCd,
                     stockCode,
                     quantity,
                     price
@@ -74,18 +109,19 @@ public class StockOrderService {
             holding.setAvgPrice(newAvg);
             portfolioRepository.save(holding);
         } else {
-            String stockName = stockMasterRepository.findByStockCode(stockCode)
-                    .map(StockMaster::getName)
-                    .orElse(stockCode);
+            String stockName = resolveStockName(stockCode);
             Portfolio newHolding = new Portfolio(user.getId(), stockCode, stockName, quantity, price, null);
             portfolioRepository.save(newHolding);
         }
 
         // 4. Save order history
-        String stockName = stockMasterRepository.findByStockCode(stockCode)
-                .map(StockMaster::getName)
-                .orElse(stockCode);
+        String stockName = resolveStockName(stockCode);
         orderHistoryRepository.save(new OrderHistory(user.getId(), stockCode, stockName, "BUY", quantity, price, orderedBy, reason));
+
+        // 5. Save notification
+        String buyMsg = String.format("%s (%s) %d주 매수 주문이 체결되었습니다. (단가: %,d원, 주문주체: %s)",
+                stockName, stockCode, quantity, (long)price, orderedBy.equals("AI") ? "🤖 AI" : "사용자");
+        notificationRepository.save(new Notification(user.getId(), buyMsg));
 
         return response;
     }
@@ -110,9 +146,16 @@ public class StockOrderService {
         // 2. Perform external KIS Mock Order call (conditional)
         OrderResponse response;
         if (user.isMockOrderEnabled()) {
+            String mockCano = (kisConfig.getMock() != null && kisConfig.getMock().getAccount() != null)
+                    ? kisConfig.getMock().getAccount().getCano()
+                    : kisConfig.getAccountNo();
+            String mockAcntPrdtCd = (kisConfig.getMock() != null && kisConfig.getMock().getAccount() != null)
+                    ? kisConfig.getMock().getAccount().getAcntPrdtCd()
+                    : kisConfig.getAccountProductCode();
+
             OrderRequest request = OrderRequest.forMockSell(
-                    kisConfig.getAccountNo(),
-                    kisConfig.getAccountProductCode(),
+                    mockCano,
+                    mockAcntPrdtCd,
                     stockCode,
                     quantity,
                     price
@@ -132,6 +175,9 @@ public class StockOrderService {
         userRepository.save(user);
 
         String stockName = holding.getStockName();
+        if (stockName == null || stockName.equals(stockCode) || stockName.trim().isEmpty()) {
+            stockName = resolveStockName(stockCode);
+        }
 
         if (holding.getQuantity() == quantity) {
             portfolioRepository.delete(holding);
@@ -142,6 +188,11 @@ public class StockOrderService {
 
         // 4. Save order history
         orderHistoryRepository.save(new OrderHistory(user.getId(), stockCode, stockName, "SELL", quantity, price, orderedBy, reason));
+
+        // 5. Save notification
+        String sellMsg = String.format("%s (%s) %d주 매도 주문이 체결되었습니다. (단가: %,d원, 주문주체: %s)",
+                stockName, stockCode, quantity, (long)price, orderedBy.equals("AI") ? "🤖 AI" : "사용자");
+        notificationRepository.save(new Notification(user.getId(), sellMsg));
 
         return response;
     }

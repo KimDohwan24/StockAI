@@ -10,6 +10,7 @@ import {
   getDailyCandles,
   getMinuteCandles,
   getHoldings,
+  getPortfolio,
   buyOrder,
   sellOrder,
   MappedStockPrice,
@@ -18,6 +19,8 @@ import {
   OrderResult,
   getStockAiAnalysis,
   getSystemConfig,
+  getFavoriteStatus,
+  toggleFavorite,
 } from '@/lib/api';
 import AiDecisionGauge from '@/components/AiDecisionGauge';
 import NewsSection from '@/components/NewsSection';
@@ -33,11 +36,13 @@ import {
   Landmark,
   ArrowUpRight,
   ArrowDownRight,
+  Star,
 } from 'lucide-react';
 
 import { useAuth } from '@/lib/auth';
 import { useVisibility } from '@/hooks/useVisibility';
 import { useStockPriceStream } from '@/hooks/useStockPriceStream';
+import { resolveStockName } from '@/lib/stockMap';
 
 type Period = 'D' | 'W' | 'M' | 'Y';
 
@@ -123,13 +128,30 @@ function TradePanel({
     [holdings, stockCode]
   );
 
+  const { data: portfolio } = useSWR(
+    isAuthenticated ? 'dashboard-portfolio' : null,
+    () => getPortfolio(),
+    { dedupingInterval: 30000, revalidateOnFocus: false }
+  );
+
+  const maxPurchasableQty = useMemo(() => {
+    const cash = portfolio?.cashBalance ?? 0;
+    return currentPrice > 0 ? Math.floor(cash / currentPrice) : 0;
+  }, [portfolio?.cashBalance, currentPrice]);
+
   const clampQuantity = useCallback(
     (val: number, currentSide: 'buy' | 'sell') => {
-      const maxQty = currentSide === 'sell' ? (userHolding?.quantity ?? 0) : Infinity;
-      const minQty = currentSide === 'sell' && (userHolding?.quantity ?? 0) === 0 ? 0 : 1;
-      return Math.max(minQty, Math.min(val, maxQty));
+      if (currentSide === 'sell') {
+        const maxQty = userHolding?.quantity ?? 0;
+        const minQty = maxQty === 0 ? 0 : 1;
+        return Math.max(minQty, Math.min(val, maxQty));
+      } else {
+        const maxQty = maxPurchasableQty;
+        const minQty = maxQty === 0 ? 0 : 1;
+        return Math.max(minQty, Math.min(val, maxQty));
+      }
     },
-    [userHolding]
+    [userHolding, maxPurchasableQty]
   );
 
   const finalQuantity = useMemo(() => clampQuantity(quantity, side), [clampQuantity, quantity, side]);
@@ -152,6 +174,7 @@ function TradePanel({
         text: `${result.side === 'BUY' ? '매수' : '매도'} 완료: ${result.stockName || priceInfo?.stockName || stockCode} ${result.quantity}주 @ ${fmt(result.price)}원`,
       });
       mutate('dashboard-holdings');
+      mutate('dashboard-portfolio');
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : '주문에 실패했습니다.';
       setOrderMsg({ type: 'error', text: msg });
@@ -238,6 +261,18 @@ function TradePanel({
             +
           </button>
         </div>
+        {side === 'buy' && portfolio && (
+          <div className="flex justify-between items-center mt-1.5 px-1 text-xs">
+            <span className="text-steel">보유 금액: {fmt(portfolio.cashBalance)}원</span>
+            <span className="text-meta-blue font-semibold">최대 {maxPurchasableQty}주 구매 가능</span>
+          </div>
+        )}
+        {side === 'sell' && (
+          <div className="flex justify-between items-center mt-1.5 px-1 text-xs">
+            <span className="text-steel">보유 수량: {userHolding?.quantity ?? 0}주</span>
+            <span className="text-meta-blue font-semibold">최대 {userHolding?.quantity ?? 0}주 매도 가능</span>
+          </div>
+        )}
       </div>
 
       <div className="bg-surface-soft rounded-meta-xl px-4 py-3">
@@ -313,9 +348,37 @@ export default function StockDetailPage() {
   const { price: wsPrice } = useStockPriceStream(stockCode, swrPrice ?? null);
 
   const priceInfo = wsPrice ?? swrPrice ?? null;
-  const stockName = priceInfo?.stockName || stockCode;
+  const stockName = resolveStockName(stockCode, priceInfo?.stockName);
 
   const { flashKey, flashClass } = usePriceFlash(priceInfo?.price);
+
+  const { data: favoriteData, mutate: mutateFavorite } = useSWR(
+    isAuthenticated && stockCode ? `favorite-status-${stockCode}` : null,
+    () => getFavoriteStatus(stockCode),
+    { revalidateOnFocus: false, dedupingInterval: 30000 }
+  );
+  const isFavorite = favoriteData?.favorited ?? false;
+  const [favoriteToggleLoading, setFavoriteToggleLoading] = useState(false);
+
+  const handleToggleFavorite = async () => {
+    if (!isAuthenticated) return;
+    setFavoriteToggleLoading(true);
+    try {
+      const res = await toggleFavorite(stockCode);
+      mutate(`favorite-status-${stockCode}`, { favorited: res.favorited }, false);
+      mutate('user-favorites');
+    } catch (err) {
+      console.error('Failed to toggle favorite:', err);
+    } finally {
+      setFavoriteToggleLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (stockName) {
+      document.title = `${stockName} (${stockCode}) | StockAI`;
+    }
+  }, [stockName, stockCode]);
 
   const [period, setPeriod] = useState<Period>('D');
   const [viewMode, setViewMode] = useState<'daily' | 'minute'>('daily');
@@ -391,8 +454,29 @@ export default function StockDetailPage() {
           <div className="space-y-8">
             {/* Price Hero */}
             <section className="bg-white border border-hairline-soft rounded-[24px] p-8 shadow-sm">
-              <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-6">
+              <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-6">
                 <div>
+                  <h1 className="text-3xl font-extrabold text-ink mb-4 flex items-center gap-3">
+                    <span className="flex items-baseline gap-2">
+                      {stockName} <span className="text-sm text-steel font-normal">({stockCode})</span>
+                    </span>
+                    {isAuthenticated && (
+                      <button
+                        onClick={handleToggleFavorite}
+                        disabled={favoriteToggleLoading}
+                        className="p-1.5 rounded-full hover:bg-surface-soft transition-colors cursor-pointer group"
+                        title={isFavorite ? '즐겨찾기 해제' : '즐겨찾기 추가'}
+                      >
+                        <Star
+                          className={`w-6 h-6 transition-all duration-300 ${
+                            isFavorite
+                              ? 'text-yellow-500 fill-yellow-500 scale-110'
+                              : 'text-steel group-hover:text-yellow-500 group-hover:scale-105'
+                          }`}
+                        />
+                      </button>
+                    )}
+                  </h1>
                   <p className="text-sm text-steel mb-1 flex items-center gap-1.5">
                     <Activity className="w-4 h-4" />
                     현재가

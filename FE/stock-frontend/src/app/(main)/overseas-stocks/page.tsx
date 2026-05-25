@@ -11,7 +11,7 @@ export const metadata: Metadata = {
   title: '해외 종목 | StockAI',
 };
 
-export const revalidate = 60;
+export const dynamic = 'force-dynamic';
 
 async function OverseasStockCatalogContent({
   searchParams,

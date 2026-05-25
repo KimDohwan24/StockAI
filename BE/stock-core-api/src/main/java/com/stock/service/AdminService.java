@@ -7,13 +7,17 @@ import com.stock.controller.dto.UserProfileResponse;
 import com.stock.domain.portfolio.PortfolioRepository;
 import com.stock.domain.repository.OrderHistoryRepository;
 import com.stock.domain.repository.UserRepository;
+import com.stock.infrastructure.client.AiServerClient;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.List;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class AdminService {
@@ -22,6 +26,16 @@ public class AdminService {
     private final PortfolioService portfolioService;
     private final OrderHistoryRepository orderHistoryRepository;
     private final PortfolioRepository portfolioRepository;
+    private final StringRedisTemplate redisTemplate;
+    private final AiServerClient aiServerClient;
+
+    private static final List<String> DOMESTIC_STOCKS = List.of(
+            "005930", "000660", "035420", "035720", "005380", "373220", "068270", "000270"
+    );
+
+    private static final List<String> OVERSEAS_STOCKS = List.of(
+            "AAPL", "TSLA", "MSFT", "NVDA", "AMZN", "GOOGL", "META", "NFLX"
+    );
 
 
     @Transactional(readOnly = true)
@@ -109,6 +123,71 @@ public class AdminService {
             user.setMockOrderEnabled(enabled);
             userRepository.save(user);
         });
+    }
+
+    @Transactional
+    public void toggleUserAiTrading(String email, boolean enabled) {
+        userRepository.findByEmail(email).ifPresent(user -> {
+            user.setAiTradingEnabled(enabled);
+            userRepository.save(user);
+        });
+    }
+
+    @Transactional
+    public void updateUserInitialBalance(String email, double balance) {
+        userRepository.findByEmail(email).ifPresent(user -> {
+            user.setInitialBalance(balance);
+            user.setCashBalance(balance);
+            userRepository.save(user);
+        });
+    }
+
+    @Transactional
+    public int syncNaverNews() {
+        log.info("Starting Naver News sync and AI analysis refresh...");
+        
+        // 1. Clear individual stock analysis caches
+        for (String stockCode : DOMESTIC_STOCKS) {
+            redisTemplate.delete("ai::analysis::" + stockCode);
+        }
+        for (String stockCode : OVERSEAS_STOCKS) {
+            redisTemplate.delete("ai::analysis::" + stockCode);
+        }
+        
+        // Clear dashboard caches
+        redisTemplate.delete("ai::dashboard::domestic");
+        redisTemplate.delete("ai::dashboard::overseas");
+
+        int count = 0;
+
+        // 2. Fetch new analysis for each stock code to populate the cache
+        for (String stockCode : DOMESTIC_STOCKS) {
+            try {
+                aiServerClient.getAiAnalysis(stockCode).block();
+                count++;
+            } catch (Exception e) {
+                log.error("Failed to sync news/analysis for domestic stock={}: {}", stockCode, e.getMessage());
+            }
+        }
+        for (String stockCode : OVERSEAS_STOCKS) {
+            try {
+                aiServerClient.getAiAnalysis(stockCode).block();
+                count++;
+            } catch (Exception e) {
+                log.error("Failed to sync news/analysis for overseas stock={}: {}", stockCode, e.getMessage());
+            }
+        }
+
+        // 3. Rebuild dashboard recommendations
+        try {
+            aiServerClient.getDashboardRecommendations("domestic").block();
+            aiServerClient.getDashboardRecommendations("overseas").block();
+        } catch (Exception e) {
+            log.error("Failed to rebuild dashboard recommendations cache: {}", e.getMessage());
+        }
+
+        log.info("Naver News sync complete. Successfully refreshed {} stocks.", count);
+        return count;
     }
 }
 

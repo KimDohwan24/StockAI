@@ -4,7 +4,7 @@ import { useEffect, useState, Fragment } from 'react';
 import { useRouter } from 'next/navigation';
 import useSWR from 'swr';
 import { useAuth } from '@/lib/auth';
-import { getAdminAiStatus, AdminAiStatusResponse, resetAiAccounts, toggleUserMockOrder } from '@/lib/api';
+import { getAdminAiStatus, AdminAiStatusResponse, resetAiAccounts, toggleUserMockOrder, toggleUserAiTrading, syncDomesticStocks, syncOverseasStocks, syncNaverNews, updateUserInitialBalance } from '@/lib/api';
 import {
   Cpu,
   TrendingUp,
@@ -22,8 +22,10 @@ import {
   RotateCcw,
   Globe,
   Shield,
+  Newspaper,
 } from 'lucide-react';
 import Link from 'next/link';
+import { resolveStockName } from '@/lib/stockMap';
 
 function fmt(n: number): string {
   if (n === null || n === undefined || isNaN(n)) return '0';
@@ -40,6 +42,12 @@ const formatDateTime = (dateStr: string) => {
     minute: '2-digit',
     second: '2-digit',
   });
+};
+
+const getStockDetailUrl = (code: string) => {
+  if (!code) return '#';
+  const isDomestic = /^\d{6}$/.test(code);
+  return isDomestic ? `/stock/${code}` : `/overseas-stocks/${code}?exchange=NAS`;
 };
 
 export default function AdminAiMonitoringPage() {
@@ -92,9 +100,90 @@ export default function AdminAiMonitoringPage() {
     }
   };
 
+  const [syncingDomestic, setSyncingDomestic] = useState(false);
+  const [syncingOverseas, setSyncingOverseas] = useState(false);
+  const [syncingNews, setSyncingNews] = useState(false);
+
+  const handleSyncDomestic = async () => {
+    if (!window.confirm('KIS로부터 국내 주식 종목 정보를 동기화하시겠습니까? (이 작업은 다소 시간이 걸릴 수 있습니다.)')) {
+      return;
+    }
+    setSyncingDomestic(true);
+    try {
+      const count = await syncDomesticStocks();
+      alert(`국내 주식 동기화 완료: ${count}개 종목이 동기화되었습니다.`);
+      mutate();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : '알 수 없는 오류';
+      alert(`동기화 실패: ${msg || '알 수 없는 오류가 발생했습니다.'}`);
+    } finally {
+      setSyncingDomestic(false);
+    }
+  };
+
+  const handleSyncOverseas = async () => {
+    if (!window.confirm('KIS로부터 해외 주식 종목 정보를 동기화하시겠습니까? (이 작업은 다소 시간이 걸릴 수 있습니다.)')) {
+      return;
+    }
+    setSyncingOverseas(true);
+    try {
+      const count = await syncOverseasStocks();
+      alert(`해외 주식 동기화 완료: ${count}개 종목이 동기화되었습니다.`);
+      mutate();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : '알 수 없는 오류';
+      alert(`동기화 실패: ${msg || '알 수 없는 오류가 발생했습니다.'}`);
+    } finally {
+      setSyncingOverseas(false);
+    }
+  };
+
+  const handleSyncNews = async () => {
+    if (!window.confirm('네이버 뉴스를 동기화하고 AI 종목 분석을 갱신하시겠습니까?\n(이 작업은 다소 시간이 걸릴 수 있습니다.)')) {
+      return;
+    }
+    setSyncingNews(true);
+    try {
+      const count = await syncNaverNews();
+      alert(`네이버 뉴스 동기화 완료: ${count}개 종목의 AI 분석이 최신화되었습니다.`);
+      mutate();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : '알 수 없는 오류';
+      alert(`동기화 실패: ${msg || '알 수 없는 오류가 발생했습니다.'}`);
+    } finally {
+      setSyncingNews(false);
+    }
+  };
+
+  const [editingUserBalance, setEditingUserBalance] = useState<{ email: string; val: string } | null>(null);
+  const [updatingBalance, setUpdatingBalance] = useState<string | null>(null);
+
+  const handleSaveBalance = async (email: string) => {
+    if (!editingUserBalance) return;
+    const balance = parseFloat(editingUserBalance.val.replace(/,/g, ''));
+    if (isNaN(balance) || balance <= 0) {
+      alert('올바른 금액을 입력해주세요.');
+      return;
+    }
+
+    setUpdatingBalance(email);
+    try {
+      await updateUserInitialBalance(email, balance);
+      alert('투자 원금이 성공적으로 변경되었습니다.');
+      setEditingUserBalance(null);
+      mutate();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : '알 수 없는 오류';
+      alert(`변경 실패: ${msg || '알 수 없는 오류가 발생했습니다.'}`);
+    } finally {
+      setUpdatingBalance(null);
+    }
+  };
+
 
 
   const [togglingUserMock, setTogglingUserMock] = useState<string | null>(null);
+  const [togglingUserAi, setTogglingUserAi] = useState<string | null>(null);
 
   const handleToggleUserMockOrder = async (email: string, currentEnabled: boolean) => {
     const nextModeName = currentEnabled ? '로컬 가상 체결 모드 (24H)' : '한투 모의투자 연동 모드';
@@ -111,6 +200,24 @@ export default function AdminAiMonitoringPage() {
       alert(`변경 실패: ${msg || '알 수 없는 오류가 발생했습니다.'}`);
     } finally {
       setTogglingUserMock(null);
+    }
+  };
+
+  const handleToggleUserAiTrading = async (email: string, currentEnabled: boolean) => {
+    const nextStateName = currentEnabled ? '중지' : '작동';
+    if (!window.confirm(`해당 AI 에이전트의 자율매매 상태를 [${nextStateName}]로 변경하시겠습니까?`)) {
+      return;
+    }
+    setTogglingUserAi(email);
+    try {
+      await toggleUserAiTrading(email, !currentEnabled);
+      alert(`성공적으로 변경되었습니다.`);
+      mutate();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : '알 수 없는 오류';
+      alert(`변경 실패: ${msg || '알 수 없는 오류가 발생했습니다.'}`);
+    } finally {
+      setTogglingUserAi(null);
     }
   };
 
@@ -198,6 +305,30 @@ export default function AdminAiMonitoringPage() {
             >
               <RotateCcw className={`w-4 h-4 text-rose-500 ${resetting ? 'animate-spin' : ''}`} />
               {resetting ? '초기화 중...' : 'AI 계정 전체 초기화'}
+            </button>
+            <button
+              onClick={handleSyncDomestic}
+              disabled={syncingDomestic}
+              className="flex items-center justify-center gap-2 px-5 py-2.5 bg-blue-50 border border-blue-200 hover:bg-blue-100 hover:border-blue-300 disabled:opacity-50 disabled:cursor-not-allowed transition-all rounded-meta-full text-sm font-bold text-blue-600 shadow-sm cursor-pointer"
+            >
+              <RefreshCw className={`w-4 h-4 text-blue-500 ${syncingDomestic ? 'animate-spin' : ''}`} />
+              {syncingDomestic ? '국내 주식 동기화 중...' : '국내 주식 동기화'}
+            </button>
+            <button
+              onClick={handleSyncOverseas}
+              disabled={syncingOverseas}
+              className="flex items-center justify-center gap-2 px-5 py-2.5 bg-purple-50 border border-purple-200 hover:bg-purple-100 hover:border-purple-300 disabled:opacity-50 disabled:cursor-not-allowed transition-all rounded-meta-full text-sm font-bold text-purple-600 shadow-sm cursor-pointer"
+            >
+              <Globe className={`w-4 h-4 text-purple-500 ${syncingOverseas ? 'animate-spin' : ''}`} />
+              {syncingOverseas ? '해외 주식 동기화 중...' : '해외 주식 동기화'}
+            </button>
+            <button
+              onClick={handleSyncNews}
+              disabled={syncingNews}
+              className="flex items-center justify-center gap-2 px-5 py-2.5 bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 hover:border-emerald-300 disabled:opacity-50 disabled:cursor-not-allowed transition-all rounded-meta-full text-sm font-bold text-emerald-600 shadow-sm cursor-pointer"
+            >
+              <Newspaper className={`w-4 h-4 text-emerald-500 ${syncingNews ? 'animate-pulse' : ''}`} />
+              {syncingNews ? '네이버 뉴스 동기화 중...' : '네이버 뉴스 동기화'}
             </button>
             <button
               onClick={() => mutate()}
@@ -329,18 +460,24 @@ export default function AdminAiMonitoringPage() {
                   </div>
 
                   <div className="flex items-center gap-5 self-start md:self-auto bg-surface-soft/60 px-5 py-2.5 rounded-2xl border border-hairline-soft">
-                    <div className="text-center">
-                      <p className="text-[10px] text-steel font-bold uppercase tracking-wider">자율매매</p>
-                      <div className="flex items-center gap-1 mt-0.5">
-                        {ai.profile.aiTradingEnabled ? (
+                    <div
+                      onClick={() => handleToggleUserAiTrading(ai.profile.email, ai.profile.aiTradingEnabled)}
+                      className="text-center cursor-pointer select-none group"
+                      title="클릭하여 이 AI의 자율매매 여부를 토글합니다."
+                    >
+                      <p className="text-[10px] text-steel font-bold uppercase tracking-wider group-hover:text-ink transition-colors">자율매매</p>
+                      <div className="flex items-center gap-1 mt-0.5 justify-center">
+                        {togglingUserAi === ai.profile.email ? (
+                          <div className="w-3.5 h-3.5 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+                        ) : ai.profile.aiTradingEnabled ? (
                           <>
-                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
-                            <span className="text-xs font-bold text-emerald-600">작동중</span>
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 group-hover:scale-110 transition-transform" />
+                            <span className="text-xs font-bold text-emerald-600 group-hover:text-emerald-700 transition-colors">작동중</span>
                           </>
                         ) : (
                           <>
-                            <XCircle className="w-3.5 h-3.5 text-stone" />
-                            <span className="text-xs font-bold text-steel">중지됨</span>
+                            <XCircle className="w-3.5 h-3.5 text-stone group-hover:scale-110 transition-transform" />
+                            <span className="text-xs font-bold text-steel group-hover:text-ink transition-colors">중지됨</span>
                           </>
                         )}
                       </div>
@@ -388,9 +525,50 @@ export default function AdminAiMonitoringPage() {
                     <p className="text-[11px] text-steel font-bold mb-1">보유 현금 잔고</p>
                     <p className="text-lg font-extrabold text-ink">{fmt(ai.portfolio?.cashBalance ?? 0)}원</p>
                   </div>
-                  <div className="bg-surface-soft/40 border border-hairline-soft rounded-2xl p-4">
-                    <p className="text-[11px] text-steel font-bold mb-1">투자 원금</p>
-                    <p className="text-lg font-extrabold text-ink">{fmt(ai.portfolio?.initialBalance ?? 0)}원</p>
+                  <div className="bg-surface-soft/40 border border-hairline-soft rounded-2xl p-4 relative">
+                    <div className="flex justify-between items-center mb-1">
+                      <p className="text-[11px] text-steel font-bold">투자 원금</p>
+                      {editingUserBalance?.email !== ai.profile.email && (
+                        <button
+                          onClick={() => setEditingUserBalance({ email: ai.profile.email, val: String(ai.portfolio?.initialBalance ?? 0) })}
+                          disabled={updatingBalance === ai.profile.email}
+                          className="text-[10px] text-meta-blue hover:text-indigo-600 font-bold transition-colors cursor-pointer"
+                        >
+                          설정
+                        </button>
+                      )}
+                    </div>
+                    {editingUserBalance?.email === ai.profile.email ? (
+                      <div className="flex items-center gap-1 mt-1">
+                        <input
+                          type="text"
+                          value={editingUserBalance.val}
+                          onChange={(e) => setEditingUserBalance({ ...editingUserBalance, val: e.target.value })}
+                          className="w-full bg-white border border-hairline-soft rounded-lg px-1.5 py-0.5 text-xs font-bold text-ink focus:outline-none focus:border-meta-blue"
+                          placeholder="금액 입력"
+                          autoFocus
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') handleSaveBalance(ai.profile.email);
+                            if (e.key === 'Escape') setEditingUserBalance(null);
+                          }}
+                        />
+                        <button
+                          onClick={() => handleSaveBalance(ai.profile.email)}
+                          disabled={updatingBalance === ai.profile.email}
+                          className="px-1.5 py-0.5 bg-meta-blue text-white rounded text-[9px] font-bold hover:bg-meta-blue-hover cursor-pointer whitespace-nowrap"
+                        >
+                          저장
+                        </button>
+                        <button
+                          onClick={() => setEditingUserBalance(null)}
+                          className="px-1.5 py-0.5 bg-stone-100 hover:bg-stone-200 rounded text-[9px] font-bold text-steel cursor-pointer whitespace-nowrap"
+                        >
+                          취소
+                        </button>
+                      </div>
+                    ) : (
+                      <p className="text-lg font-extrabold text-ink">{fmt(ai.portfolio?.initialBalance ?? 0)}원</p>
+                    )}
                   </div>
                   <div className="bg-surface-soft/40 border border-hairline-soft rounded-2xl p-4">
                     <p className="text-[11px] text-steel font-bold mb-1">수익률 / 수익금</p>
@@ -422,21 +600,26 @@ export default function AdminAiMonitoringPage() {
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-hairline-soft">
-                            {ai.holdings.map((hold) => (
-                              <tr key={hold.id} className="hover:bg-surface-soft/30 transition-colors">
-                                <td className="px-4 py-3 font-semibold text-ink">
-                                  <div>{hold.stockName}</div>
-                                  <div className="text-[10px] text-steel font-normal">{hold.stockCode}</div>
-                                </td>
-                                <td className="px-4 py-3 text-right text-charcoal">{hold.quantity}주</td>
-                                <td className="px-4 py-3 text-right text-steel">{fmt(hold.avgPrice)}</td>
-                                <td className="px-4 py-3 text-right text-charcoal font-semibold">{fmt(hold.currentPrice)}</td>
-                                <td className={`px-4 py-3 text-right font-bold ${hold.profitLoss >= 0 ? 'text-market-up' : 'text-market-down'}`}>
-                                  <div>{hold.profitLoss >= 0 ? '+' : ''}{fmt(hold.profitLoss)}</div>
-                                  <div className="text-[10px] font-semibold">{hold.profitRate.toFixed(2)}%</div>
-                                </td>
-                              </tr>
-                            ))}
+                            {ai.holdings.map((hold) => {
+                              const displayName = resolveStockName(hold.stockCode, hold.stockName);
+                              return (
+                                <tr key={hold.id} className="hover:bg-surface-soft/30 transition-colors">
+                                  <td className="px-4 py-3 font-semibold text-ink">
+                                    <Link href={getStockDetailUrl(hold.stockCode)} className="hover:text-meta-blue hover:underline transition-colors block">
+                                      <div>{displayName}</div>
+                                      <div className="text-[10px] text-steel font-normal">{hold.stockCode}</div>
+                                    </Link>
+                                  </td>
+                                  <td className="px-4 py-3 text-right text-charcoal">{hold.quantity}주</td>
+                                  <td className="px-4 py-3 text-right text-steel">{fmt(hold.avgPrice)}</td>
+                                  <td className="px-4 py-3 text-right text-charcoal font-semibold">{fmt(hold.currentPrice)}</td>
+                                  <td className={`px-4 py-3 text-right font-bold ${hold.profitLoss >= 0 ? 'text-market-up' : 'text-market-down'}`}>
+                                    <div>{hold.profitLoss >= 0 ? '+' : ''}{fmt(hold.profitLoss)}</div>
+                                    <div className="text-[10px] font-semibold">{hold.profitRate.toFixed(2)}%</div>
+                                  </td>
+                                </tr>
+                              );
+                            })}
                           </tbody>
                         </table>
                       </div>
@@ -466,56 +649,61 @@ export default function AdminAiMonitoringPage() {
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-hairline-soft">
-                            {ai.orderHistory.slice(0, 15).map((order) => (
-                              <Fragment key={order.id}>
-                                <tr className="hover:bg-surface-soft/30 transition-colors">
-                                  <td className="px-4 py-3 text-steel whitespace-nowrap">
-                                    {formatDateTime(order.createdAt)}
-                                  </td>
-                                  <td className="px-4 py-3">
-                                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                                      order.orderType === 'BUY'
-                                        ? 'bg-market-up/10 text-market-up'
-                                        : 'bg-market-down/10 text-market-down'
-                                    }`}>
-                                      {order.orderType === 'BUY' ? '매수' : '매도'}
-                                    </span>
-                                  </td>
-                                  <td className="px-4 py-3 font-semibold text-ink">
-                                    {order.stockName}
-                                    <div className="text-[10px] text-steel font-normal">{order.ticker}</div>
-                                  </td>
-                                  <td className="px-4 py-3 text-right">
-                                    <div className="text-charcoal font-semibold">{fmt(order.price)}원</div>
-                                    <div className="text-steel">{order.quantity}주</div>
-                                  </td>
-                                  <td className="px-4 py-3 text-right text-charcoal font-bold">
-                                    <div>{fmt(order.amount)}원</div>
-                                    {order.reason && (
-                                      <button
-                                        onClick={() => toggleReason(order.id)}
-                                        className="mt-1 text-[10px] px-2.5 py-0.5 bg-indigo-50 border border-indigo-200 text-indigo-600 hover:bg-indigo-100 active:bg-indigo-200 transition-all rounded font-bold cursor-pointer inline-flex items-center gap-1 shadow-sm"
-                                      >
-                                        이유 {expandedReasons[order.id] ? '접기' : '보기'}
-                                      </button>
-                                    )}
-                                  </td>
-                                </tr>
-                                {order.reason && expandedReasons[order.id] && (
-                                  <tr className="bg-indigo-50/5 animate-fadeIn">
-                                    <td colSpan={5} className="px-4 py-3.5 bg-indigo-50/20 border-l-4 border-indigo-500">
-                                      <div className="flex gap-2">
-                                        <Info className="w-4 h-4 text-indigo-500 shrink-0 mt-0.5" />
-                                        <div className="text-left">
-                                          <p className="font-extrabold text-[10px] text-indigo-900 uppercase tracking-wider mb-0.5">AI 매매 분석 및 판단 이유</p>
-                                          <p className="leading-relaxed text-[11px] text-charcoal font-medium">{order.reason}</p>
-                                        </div>
-                                      </div>
+                            {ai.orderHistory.slice(0, 15).map((order) => {
+                              const displayName = resolveStockName(order.ticker, order.stockName);
+                              return (
+                                <Fragment key={order.id}>
+                                  <tr className="hover:bg-surface-soft/30 transition-colors">
+                                    <td className="px-4 py-3 text-steel whitespace-nowrap">
+                                      {formatDateTime(order.createdAt)}
+                                    </td>
+                                    <td className="px-4 py-3">
+                                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                        order.orderType === 'BUY'
+                                          ? 'bg-market-up/10 text-market-up'
+                                          : 'bg-market-down/10 text-market-down'
+                                      }`}>
+                                        {order.orderType === 'BUY' ? '매수' : '매도'}
+                                      </span>
+                                    </td>
+                                    <td className="px-4 py-3 font-semibold text-ink">
+                                      <Link href={getStockDetailUrl(order.ticker)} className="hover:text-meta-blue hover:underline transition-colors block">
+                                        <div>{displayName}</div>
+                                        <div className="text-[10px] text-steel font-normal">{order.ticker}</div>
+                                      </Link>
+                                    </td>
+                                    <td className="px-4 py-3 text-right">
+                                      <div className="text-charcoal font-semibold">{fmt(order.price)}원</div>
+                                      <div className="text-steel">{order.quantity}주</div>
+                                    </td>
+                                    <td className="px-4 py-3 text-right text-charcoal font-bold">
+                                      <div>{fmt(order.amount)}원</div>
+                                      {order.reason && (
+                                        <button
+                                          onClick={() => toggleReason(order.id)}
+                                          className="mt-1 text-[10px] px-2.5 py-0.5 bg-indigo-50 border border-indigo-200 text-indigo-600 hover:bg-indigo-100 active:bg-indigo-200 transition-all rounded font-bold cursor-pointer inline-flex items-center gap-1 shadow-sm"
+                                        >
+                                          이유 {expandedReasons[order.id] ? '접기' : '보기'}
+                                        </button>
+                                      )}
                                     </td>
                                   </tr>
-                                )}
-                              </Fragment>
-                            ))}
+                                  {order.reason && expandedReasons[order.id] && (
+                                    <tr className="bg-indigo-50/5 animate-fadeIn">
+                                      <td colSpan={5} className="px-4 py-3.5 bg-indigo-50/20 border-l-4 border-indigo-500">
+                                        <div className="flex gap-2">
+                                          <Info className="w-4 h-4 text-indigo-500 shrink-0 mt-0.5" />
+                                          <div className="text-left">
+                                            <p className="font-extrabold text-[10px] text-indigo-900 uppercase tracking-wider mb-0.5">AI 매매 분석 및 판단 이유</p>
+                                            <p className="leading-relaxed text-[11px] text-charcoal font-medium">{order.reason}</p>
+                                          </div>
+                                        </div>
+                                      </td>
+                                    </tr>
+                                  )}
+                                </Fragment>
+                              );
+                            })}
                           </tbody>
                         </table>
                       </div>

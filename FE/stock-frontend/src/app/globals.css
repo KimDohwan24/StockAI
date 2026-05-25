@@ -77,3 +77,127 @@ body {
   animation: flash-bg-down 0.6s ease-out;
 }
 
+/* ═══════════════════════════════════════════════════════════
+   Dark Mode System Overrides
+   ═══════════════════════════════════════════════════════════ */
+.dark {
+  --background: #0a1317;
+  --foreground: #f1f4f7;
+}
+
+.dark body {
+  background-color: #0a1317;
+  color: #f1f4f7;
+}
+
+.dark nav {
+  background-color: rgba(10, 19, 23, 0.8) !important;
+  border-bottom-color: #1c2e36 !important;
+}
+
+.dark .bg-canvas {
+  background-color: #0a1317 !important;
+}
+
+.dark .bg-white {
+  background-color: #121f24 !important;
+}
+
+.dark .bg-surface-soft {
+  background-color: #1c2e36 !important;
+}
+
+.dark .text-ink {
+  color: #f1f4f7 !important;
+}
+
+.dark .text-slate {
+  color: #dee3e9 !important;
+}
+
+.dark .text-steel {
+  color: #a0aab4 !important;
+}
+
+.dark .text-charcoal {
+  color: #dee3e9 !important;
+}
+
+.dark .border-hairline {
+  border-color: #2b3f49 !important;
+}
+
+.dark .border-hairline-soft {
+  border-color: #1c2e36 !important;
+}
+
+/* Specific component adaptations */
+.dark .meta-card {
+  background-color: #121f24 !important;
+  border-color: #1c2e36 !important;
+}
+
+.dark input {
+  background-color: #121f24 !important;
+  color: #f1f4f7 !important;
+  border-color: #2b3f49 !important;
+}
+
+.dark input::placeholder {
+  color: #a0aab4 !important;
+}
+
+.dark button:hover, .dark Link:hover {
+  background-color: #1c2e36 !important;
+}
+
+.dark .bg-emerald-50, .dark .bg-emerald-50\/25 {
+  background-color: rgba(49, 162, 76, 0.1) !important;
+}
+
+.dark .bg-rose-50, .dark .bg-rose-50\/25 {
+  background-color: rgba(228, 30, 63, 0.1) !important;
+}
+
+.dark .bg-slate-50 {
+  background-color: rgba(93, 108, 123, 0.1) !important;
+}
+
+.dark .border-emerald-100, .dark .border-emerald-100\/50 {
+  border-color: rgba(49, 162, 76, 0.2) !important;
+}
+
+.dark .border-rose-100, .dark .border-rose-100\/50 {
+  border-color: rgba(228, 30, 63, 0.2) !important;
+}
+
+.dark .border-slate-100 {
+  border-color: rgba(93, 108, 123, 0.2) !important;
+}
+
+.dark .bg-meta-blue\/5 {
+  background-color: rgba(0, 100, 224, 0.1) !important;
+}
+
+.dark .bg-indigo-50\/50 {
+  background-color: rgba(99, 102, 241, 0.1) !important;
+}
+
+.dark .border-indigo-100 {
+  border-color: rgba(99, 102, 241, 0.2) !important;
+}
+
+.dark .meta-button-secondary {
+  border-color: #f1f4f7 !important;
+  color: #f1f4f7 !important;
+}
+
+.dark .meta-button-primary {
+  background-color: #ffffff !important;
+  color: #0a1317 !important;
+}
+
+.dark .meta-button-primary:active {
+  background-color: #dee3e9 !important;
+}
+

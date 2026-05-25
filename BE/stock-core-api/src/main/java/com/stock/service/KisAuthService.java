@@ -22,6 +22,8 @@ public class KisAuthService {
 
     private static final String REDIS_TOKEN_KEY = "kis:access_token";
     private static final String REDIS_TOKEN_EXPIRE_KEY = "kis:access_token:expires_in";
+    private static final String REDIS_MOCK_TOKEN_KEY = "kis:mock:access_token";
+    private static final String REDIS_MOCK_TOKEN_EXPIRE_KEY = "kis:mock:access_token:expires_in";
     private static final String REDIS_WS_KEY = "kis:websocket_approval_key";
     private static final Duration WS_KEY_TTL = Duration.ofHours(23);
 
@@ -30,13 +32,16 @@ public class KisAuthService {
     private final KisConfig kisConfig;
     private final StringRedisTemplate redisTemplate;
     private final WebClient oAuthWebClient;
+    private final WebClient mockOAuthWebClient;
 
     public KisAuthService(KisConfig kisConfig,
                           StringRedisTemplate redisTemplate,
-                          @Qualifier("kisOAuthWebClient") WebClient oAuthWebClient) {
+                          @Qualifier("kisOAuthWebClient") WebClient oAuthWebClient,
+                          @Qualifier("kisMockOAuthWebClient") WebClient mockOAuthWebClient) {
         this.kisConfig = kisConfig;
         this.redisTemplate = redisTemplate;
         this.oAuthWebClient = oAuthWebClient;
+        this.mockOAuthWebClient = mockOAuthWebClient;
     }
 
     private String getFromCache(String key) {
@@ -119,6 +124,65 @@ public class KisAuthService {
 
     public String issueAccessToken() {
         return doIssueAccessToken();
+    }
+
+    public synchronized String getMockAccessToken() {
+        String token = getFromCache(REDIS_MOCK_TOKEN_KEY);
+        if (token != null && !token.isEmpty()) {
+            String expireStr = getFromCache(REDIS_MOCK_TOKEN_EXPIRE_KEY);
+            if (expireStr != null) {
+                long remaining = Long.parseLong(expireStr) - (System.currentTimeMillis() / 1000);
+                if (remaining > 300) {
+                    log.debug("Using cached KIS Mock access token");
+                    return token;
+                }
+            } else {
+                return token;
+            }
+        }
+        return doIssueMockAccessToken();
+    }
+
+    private String doIssueMockAccessToken() {
+        log.info("Issuing new KIS Mock access token...");
+        String mockAppkey = kisConfig.getMock() != null ? kisConfig.getMock().getAppkey() : kisConfig.getAppkey();
+        String mockAppsecret = kisConfig.getMock() != null ? kisConfig.getMock().getAppsecret() : kisConfig.getAppsecret();
+
+        if (mockAppkey == null || mockAppsecret == null || mockAppkey.trim().isEmpty() || mockAppkey.startsWith("YOUR_")) {
+            log.warn("Mock KIS credentials are not configured, falling back to real KIS credentials");
+            return getAccessToken();
+        }
+
+        KisTokenRequest request = new KisTokenRequest();
+        request.setAppkey(mockAppkey);
+        request.setAppsecret(mockAppsecret);
+
+        KisTokenResponse response = mockOAuthWebClient
+                .post()
+                .uri("/oauth2/tokenP")
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(request)
+                .retrieve()
+                .onStatus(status -> status.isError(),
+                        clientResponse -> clientResponse.bodyToMono(String.class)
+                                .flatMap(errorBody -> Mono.error(new RuntimeException("KIS Mock Token issuance failed: " + errorBody))))
+                .bodyToMono(KisTokenResponse.class)
+                .block();
+
+        if (response == null || response.getAccess_token() == null) {
+            throw new RuntimeException("KIS mock access token response is empty");
+        }
+
+        String token = "Bearer " + response.getAccess_token();
+        long expiresIn = response.getExpires_in() != null ? response.getExpires_in() : 86400L;
+
+        long redisTtl = Math.max(expiresIn - 300, 60);
+        setToCache(REDIS_MOCK_TOKEN_KEY, token, Duration.ofSeconds(redisTtl));
+        setToCache(REDIS_MOCK_TOKEN_EXPIRE_KEY,
+                String.valueOf(System.currentTimeMillis() / 1000 + expiresIn), Duration.ofSeconds(redisTtl));
+
+        log.info("KIS Mock access token issued successfully, expiresIn={}s", expiresIn);
+        return token;
     }
 
     public synchronized String issueWebSocketKey() {

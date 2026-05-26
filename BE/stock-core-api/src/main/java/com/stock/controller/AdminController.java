@@ -61,6 +61,11 @@ public class AdminController {
         int count = adminService.syncNaverNews();
         return ResponseEntity.ok(count);
     }
+
+    @GetMapping("/system-status")
+    public ResponseEntity<Map<String, Object>> getSystemStatus() {
+        return ResponseEntity.ok(adminService.getSystemStatus());
+    }
 }
 
 

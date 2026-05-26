@@ -9,4 +9,5 @@ public class KisOverseasStockMasterItem {
     private String kor_sect_nm;
     private String tr_natn_cd;
     private String crcy_cd;
+    private String exchangeCode;
 }

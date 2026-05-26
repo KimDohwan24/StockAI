@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import useSWR from 'swr';
 import { useAuth } from '@/lib/auth';
 import { wsManager } from '@/lib/websocket';
-import { getAdminAiStatus, AdminAiStatusResponse, resetAiAccounts, toggleUserMockOrder, toggleUserAiTrading, syncDomesticStocks, syncOverseasStocks, syncNaverNews, updateUserInitialBalance } from '@/lib/api';
+import { getAdminAiStatus, AdminAiStatusResponse, HoldingResponse, resetAiAccounts, toggleUserMockOrder, toggleUserAiTrading, syncDomesticStocks, syncOverseasStocks, syncNaverNews, updateUserInitialBalance, getAdminSystemStatus } from '@/lib/api';
 import {
   Cpu,
   TrendingUp,
@@ -74,6 +74,13 @@ export default function AdminAiMonitoringPage() {
     { refreshInterval: 10000, dedupingInterval: 5000 }
   );
 
+  // Fetch system status (stock counts and fallback state)
+  const { data: systemStatus, mutate: mutateSystemStatus } = useSWR(
+    isAuthenticated && user?.role === 'ADMIN' ? 'admin-system-status' : null,
+    getAdminSystemStatus,
+    { refreshInterval: 10000, dedupingInterval: 5000 }
+  );
+
   // AI 매매 이벤트 실시간 감지하여 자동 새로고침(mutate)
   useEffect(() => {
     if (isAuthenticated && user?.role === 'ADMIN') {
@@ -127,6 +134,7 @@ export default function AdminAiMonitoringPage() {
       const count = await syncDomesticStocks();
       alert(`국내 주식 동기화 완료: ${count}개 종목이 동기화되었습니다.`);
       mutate();
+      mutateSystemStatus();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : '알 수 없는 오류';
       alert(`동기화 실패: ${msg || '알 수 없는 오류가 발생했습니다.'}`);
@@ -144,6 +152,7 @@ export default function AdminAiMonitoringPage() {
       const count = await syncOverseasStocks();
       alert(`해외 주식 동기화 완료: ${count}개 종목이 동기화되었습니다.`);
       mutate();
+      mutateSystemStatus();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : '알 수 없는 오류';
       alert(`동기화 실패: ${msg || '알 수 없는 오류가 발생했습니다.'}`);
@@ -183,12 +192,12 @@ export default function AdminAiMonitoringPage() {
         id: Date.now(),
         savedAt: new Date().toISOString(),
         summary: {
-          totalAsset: aiStatusList.reduce((acc: number, curr: any) => acc + (curr.portfolio?.totalAssetValue ?? 0), 0),
-          totalInitial: aiStatusList.reduce((acc: number, curr: any) => acc + (curr.portfolio?.initialBalance ?? 0), 0),
-          activeCount: aiStatusList.filter((a: any) => a.profile.aiTradingEnabled).length,
-          totalOrders: aiStatusList.reduce((acc: number, curr: any) => acc + (curr.orderHistory?.length ?? 0), 0),
+          totalAsset: aiStatusList.reduce((acc: number, curr: AdminAiStatusResponse) => acc + (curr.portfolio?.totalAssetValue ?? 0), 0),
+          totalInitial: aiStatusList.reduce((acc: number, curr: AdminAiStatusResponse) => acc + (curr.portfolio?.initialBalance ?? 0), 0),
+          activeCount: aiStatusList.filter((a: AdminAiStatusResponse) => a.profile.aiTradingEnabled).length,
+          totalOrders: aiStatusList.reduce((acc: number, curr: AdminAiStatusResponse) => acc + (curr.orderHistory?.length ?? 0), 0),
         },
-        records: aiStatusList.map((ai: any) => {
+        records: aiStatusList.map((ai: AdminAiStatusResponse) => {
           const FREE_MODELS_LABELS = [
             "Google Gemma 2",
             "Meta Llama 3",
@@ -215,7 +224,7 @@ export default function AdminAiMonitoringPage() {
               cashBalance: ai.portfolio.cashBalance,
               totalAssetValue: ai.portfolio.totalAssetValue,
             } : null,
-            holdings: ai.holdings ? ai.holdings.map((h: any) => ({
+            holdings: ai.holdings ? ai.holdings.map((h: HoldingResponse) => ({
               stockCode: h.stockCode,
               stockName: h.stockName,
               quantity: h.quantity,
@@ -369,6 +378,56 @@ export default function AdminAiMonitoringPage() {
   return (
     <div className="min-h-screen bg-canvas text-ink">
       <main className="max-w-7xl mx-auto px-6 py-12 space-y-12">
+        {/* Fallback Warning Banner */}
+        {systemStatus && (systemStatus.isDomesticFallback || systemStatus.isOverseasFallback) && (
+          <div className="relative overflow-hidden bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200/70 rounded-3xl p-6 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-6 transition-all duration-300">
+            {/* Ambient blur glow effect */}
+            <div className="absolute top-0 right-0 -mt-6 -mr-6 w-24 h-24 bg-amber-200 rounded-full blur-2xl opacity-40 pointer-events-none" />
+            
+            <div className="flex items-start gap-4">
+              <div className="p-3 bg-amber-100 rounded-2xl shrink-0">
+                <Info className="w-6 h-6 text-amber-600 animate-pulse" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-amber-900 tracking-tight">
+                  주식 데이터 동기화 필요 (하드코딩 폴백 작동 중)
+                </h3>
+                <p className="text-sm text-amber-700/90 mt-1 max-w-2xl leading-relaxed">
+                  현재 데이터베이스에 한투 API 연동 데이터를 불러오지 못해 임시로 하드코딩된 폴백 데이터
+                  ({systemStatus.isDomesticFallback && `국내 주식 ${systemStatus.domesticStockCount}종목`} 
+                  {systemStatus.isDomesticFallback && systemStatus.isOverseasFallback && ' / '}
+                  {systemStatus.isOverseasFallback && `해외 주식 ${systemStatus.overseasStockCount}종목`})만 데이터베이스에 로드되어 있습니다.
+                  <br />
+                  AI 모델들이 실제 시장의 전 종목을 감시하고 자율매매를 수행할 수 있도록, 아래의 **동기화 버튼**을 눌러 한국투자증권 실시간 종목 정보를 DB에 저장해 주세요.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto shrink-0">
+              {systemStatus.isDomesticFallback && (
+                <button
+                  onClick={handleSyncDomestic}
+                  disabled={syncingDomestic}
+                  className="px-5 py-2.5 bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white rounded-xl text-xs font-extrabold shadow-sm transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${syncingDomestic ? 'animate-spin' : ''}`} />
+                  국내 종목 즉시 동기화
+                </button>
+              )}
+              {systemStatus.isOverseasFallback && (
+                <button
+                  onClick={handleSyncOverseas}
+                  disabled={syncingOverseas}
+                  className="px-5 py-2.5 bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white rounded-xl text-xs font-extrabold shadow-sm transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  <Globe className={`w-3.5 h-3.5 ${syncingOverseas ? 'animate-spin' : ''}`} />
+                  해외 종목 즉시 동기화
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Header */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div>
@@ -407,24 +466,14 @@ export default function AdminAiMonitoringPage() {
             {syncingDomestic ? '국내 동기화 중...' : '국내 동기화'}
           </button>
 
-          <div className="flex gap-2 w-full">
-            <button
-              onClick={handleSyncOverseas}
-              disabled={syncingOverseas}
-              className="flex-1 flex items-center justify-center gap-2 px-3 py-3.5 bg-purple-50 border border-purple-200 hover:bg-purple-100 hover:border-purple-300 disabled:opacity-50 disabled:cursor-not-allowed transition-all rounded-xl text-[13px] font-bold text-purple-600 shadow-sm cursor-pointer whitespace-nowrap"
-            >
-              <Globe className={`w-4 h-4 text-purple-500 ${syncingOverseas ? 'animate-spin' : ''}`} />
-              {syncingOverseas ? '해외...' : '해외 동기화'}
-            </button>
-            <button
-              onClick={handleSyncNews}
-              disabled={syncingNews}
-              className="flex-1 flex items-center justify-center gap-2 px-3 py-3.5 bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 hover:border-emerald-300 disabled:opacity-50 disabled:cursor-not-allowed transition-all rounded-xl text-[13px] font-bold text-emerald-600 shadow-sm cursor-pointer whitespace-nowrap"
-            >
-              <Newspaper className={`w-4 h-4 text-emerald-500 ${syncingNews ? 'animate-pulse' : ''}`} />
-              {syncingNews ? '뉴스...' : '뉴스 동기화'}
-            </button>
-          </div>
+          <button
+            onClick={handleSyncNews}
+            disabled={syncingNews}
+            className="flex items-center justify-center shrink-0 gap-2 px-6 py-3.5 bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 hover:border-emerald-300 disabled:opacity-50 disabled:cursor-not-allowed transition-all rounded-xl text-sm font-bold text-emerald-600 shadow-sm cursor-pointer w-full whitespace-nowrap"
+          >
+            <Newspaper className={`w-4 h-4 text-emerald-500 ${syncingNews ? 'animate-pulse' : ''}`} />
+            {syncingNews ? '뉴스 동기화 중...' : '뉴스 동기화'}
+          </button>
 
           <div className="flex gap-2 w-full">
             <button
@@ -542,8 +591,8 @@ export default function AdminAiMonitoringPage() {
             const aiProfitRate = (ai.portfolio?.initialBalance ?? 0) > 0
               ? (aiProfit / (ai.portfolio?.initialBalance ?? 0)) * 100
               : 0;
-            const actualHoldings = ai.holdings?.filter((h: any) => !h.isReservation) || [];
-            const reservationHoldings = ai.holdings?.filter((h: any) => h.isReservation) || [];
+            const actualHoldings = ai.holdings?.filter((h: HoldingResponse) => !h.isReservation) || [];
+            const reservationHoldings = ai.holdings?.filter((h: HoldingResponse) => h.isReservation) || [];
 
             return (
               <div key={ai.profile.id} className="space-y-6 bg-white border border-hairline-soft rounded-[32px] p-6 md:p-8 shadow-sm">
@@ -730,6 +779,7 @@ export default function AdminAiMonitoringPage() {
                                 <th className="px-4 py-2.5">종목명</th>
                                 <th className="px-4 py-2.5 text-right">수량</th>
                                 <th className="px-4 py-2.5 text-right">평균가</th>
+                                <th className="px-4 py-2.5 text-right">총 구매금액</th>
                                 <th className="px-4 py-2.5 text-right">현재가</th>
                                 <th className="px-4 py-2.5 text-right">손익 (율)</th>
                               </tr>
@@ -750,6 +800,9 @@ export default function AdminAiMonitoringPage() {
                                     </td>
                                     <td className="px-4 py-3 text-right text-steel">
                                       {fmt(hold.avgPrice)}원
+                                    </td>
+                                    <td className="px-4 py-3 text-right text-steel">
+                                      {fmt(hold.avgPrice * hold.quantity)}원
                                     </td>
                                     <td className="px-4 py-3 text-right text-charcoal font-semibold">{fmt(hold.currentPrice)}원</td>
                                     <td className={`px-4 py-3 text-right font-bold ${hold.profitLoss >= 0 ? 'text-market-up' : 'text-market-down'}`}>

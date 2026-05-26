@@ -8,6 +8,10 @@ import com.stock.infrastructure.dto.ai.StockAiAnalysisResponse;
 import com.stock.security.jwt.JwtAuthenticationFilter;
 import com.stock.security.jwt.JwtTokenProvider;
 import com.stock.security.ratelimit.RateLimitFilter;
+import com.stock.domain.favorite.FavoriteStockRepository;
+import com.stock.domain.portfolio.PortfolioRepository;
+import com.stock.domain.stock.StockMasterRepository;
+import com.stock.domain.overseas.OverseasStockMasterRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
@@ -59,6 +63,18 @@ public class AiRecommendationControllerTest {
 
     @MockBean
     private JwtTokenProvider jwtTokenProvider;
+
+    @MockBean
+    private PortfolioRepository portfolioRepository;
+
+    @MockBean
+    private FavoriteStockRepository favoriteStockRepository;
+
+    @MockBean
+    private StockMasterRepository stockMasterRepository;
+
+    @MockBean
+    private OverseasStockMasterRepository overseasStockMasterRepository;
 
     @Autowired
     private ObjectMapper objectMapper;

@@ -6,6 +6,7 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.client.reactive.ReactorClientHttpConnector;
+import org.springframework.web.reactive.function.client.ExchangeStrategies;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.netty.http.client.HttpClient;
 import reactor.netty.resources.ConnectionProvider;
@@ -93,13 +94,22 @@ public class WebClientConfig {
 
     @Bean("aiServerWebClient")
     public WebClient aiServerWebClient(AiServerConfig aiServerConfig) {
+        // 해외 주식 6,000+ 개를 한번에 수신하기 위해 50MB 버퍼와 120초 타임아웃 사용
+        int maxMemorySize = 50 * 1024 * 1024; // 50MB
+        int timeoutMs = Math.max(aiServerConfig.getTimeout(), 120_000); // 최소 120초
+
+        ExchangeStrategies exchangeStrategies = ExchangeStrategies.builder()
+                .codecs(codecs -> codecs.defaultCodecs().maxInMemorySize(maxMemorySize))
+                .build();
+
         HttpClient httpClient = HttpClient.create()
-                .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, aiServerConfig.getTimeout())
-                .responseTimeout(Duration.ofMillis(aiServerConfig.getTimeout()));
+                .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 10_000)
+                .responseTimeout(Duration.ofMillis(timeoutMs));
 
         return WebClient.builder()
                 .baseUrl(aiServerConfig.getUrl())
                 .clientConnector(new ReactorClientHttpConnector(httpClient))
+                .exchangeStrategies(exchangeStrategies)
                 .defaultHeader("Content-Type", "application/json; charset=utf-8")
                 .build();
     }

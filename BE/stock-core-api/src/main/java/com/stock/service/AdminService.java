@@ -21,6 +21,7 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.Map;
 
 import com.stock.domain.stock.StockMasterRepository;
 import com.stock.domain.overseas.OverseasStockMasterRepository;
@@ -245,6 +246,18 @@ public class AdminService {
 
     private boolean isDomestic(String code) {
         return code != null && code.matches("\\d+");
+    }
+
+    @Transactional(readOnly = true)
+    public Map<String, Object> getSystemStatus() {
+        long domesticCount = stockMasterRepository.count();
+        long overseasCount = overseasStockMasterRepository.count();
+        return Map.of(
+            "domesticStockCount", domesticCount,
+            "overseasStockCount", overseasCount,
+            "isDomesticFallback", domesticCount <= 50,
+            "isOverseasFallback", false
+        );
     }
 }
 

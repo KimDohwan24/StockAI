@@ -644,28 +644,7 @@ export default function Dashboard() {
           </div>
         )}
 
-        <div className="flex gap-2 mb-12">
-          <button
-            onClick={() => setDashboardTab('domestic')}
-            className={`px-6 py-2.5 rounded-meta-full text-xs font-bold border transition-all -tracking-[0.14px] cursor-pointer ${
-              dashboardTab === 'domestic'
-                ? 'bg-ink text-white border-transparent shadow-sm'
-                : 'bg-canvas text-steel border-hairline hover:border-ink hover:text-ink'
-            }`}
-          >
-            국내 주식
-          </button>
-          <button
-            onClick={() => setDashboardTab('overseas')}
-            className={`px-6 py-2.5 rounded-meta-full text-xs font-bold border transition-all -tracking-[0.14px] cursor-pointer ${
-              dashboardTab === 'overseas'
-                ? 'bg-ink text-white border-transparent shadow-sm'
-                : 'bg-canvas text-steel border-hairline hover:border-ink hover:text-ink'
-            }`}
-          >
-            해외 주식
-          </button>
-        </div>
+        {/* 해외 주식 비활성화로 인해 탭 비활성화 및 국내 주식 단독 노출 */}
 
         {dashboardTab === 'domestic' && (
           <div className="space-y-16">

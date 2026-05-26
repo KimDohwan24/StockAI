@@ -694,3 +694,14 @@ export async function runBacktest(items: { stockCode: string; targetPrice: numbe
     body: JSON.stringify({ items }),
   });
 }
+
+export interface SystemStatusResponse {
+  domesticStockCount: number;
+  overseasStockCount: number;
+  isDomesticFallback: boolean;
+  isOverseasFallback: boolean;
+}
+
+export async function getAdminSystemStatus(): Promise<SystemStatusResponse> {
+  return fetcher<SystemStatusResponse>(`${API_BASE_URL}/api/admin/system-status`);
+}

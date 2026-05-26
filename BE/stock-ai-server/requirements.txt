@@ -11,3 +11,6 @@ aiokafka>=0.9.0
 pytest>=8.0.0
 pytest-asyncio>=0.23.0
 httpx>=0.27.0
+finance-datareader>=0.9.50
+pandas>=2.0.0
+lxml>=4.9.0

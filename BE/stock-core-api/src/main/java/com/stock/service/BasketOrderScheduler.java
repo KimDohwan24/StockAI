@@ -13,6 +13,10 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.DayOfWeek;
+import java.time.LocalTime;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.util.List;
 
 @Slf4j
@@ -39,6 +43,11 @@ public class BasketOrderScheduler {
                 User user = userRepository.findById(item.getUserId()).orElse(null);
                 if (user == null) continue;
 
+                // For Korea Investment Securities (Mock) integrated accounts, only execute during market hours
+                if (user.isMockOrderEnabled() && !isMarketHours()) {
+                    continue;
+                }
+
                 StockPriceResponse priceResp = stockPriceService.getCurrentPrice(item.getStockCode());
                 if (priceResp == null) continue;
 
@@ -53,6 +62,14 @@ public class BasketOrderScheduler {
                 log.error("장바구니 예약 매수 처리 오류 (항목 ID: " + item.getId() + ")", e);
             }
         }
+    }
+
+    private boolean isMarketHours() {
+        ZonedDateTime now = ZonedDateTime.now(ZoneId.of("Asia/Seoul"));
+        DayOfWeek day = now.getDayOfWeek();
+        if (day == DayOfWeek.SATURDAY || day == DayOfWeek.SUNDAY) return false;
+        LocalTime time = now.toLocalTime();
+        return !time.isBefore(LocalTime.of(9, 0)) && !time.isAfter(LocalTime.of(15, 30));
     }
 
     private void executeOrder(User user, BasketItem item, int currentPrice) {

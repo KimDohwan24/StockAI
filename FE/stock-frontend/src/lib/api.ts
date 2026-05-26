@@ -153,6 +153,7 @@ export interface HoldingResponse {
   currentPrice: number;
   profitLoss: number;
   profitRate: number;
+  isReservation?: boolean;
 }
 
 export interface TradeResponse {

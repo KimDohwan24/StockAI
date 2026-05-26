@@ -1,9 +1,17 @@
 package com.stock.service;
 
 import com.stock.domain.entity.User;
+import com.stock.domain.favorite.FavoriteStock;
+import com.stock.domain.favorite.FavoriteStockRepository;
 import com.stock.domain.portfolio.Portfolio;
 import com.stock.domain.portfolio.PortfolioRepository;
 import com.stock.domain.repository.UserRepository;
+import com.stock.domain.stock.StockMaster;
+import com.stock.domain.stock.StockMasterRepository;
+import com.stock.domain.overseas.OverseasStockMaster;
+import com.stock.domain.overseas.OverseasStockMasterRepository;
+import com.stock.domain.basket.BasketItem;
+import com.stock.domain.basket.BasketRepository;
 import com.stock.infrastructure.client.AiServerClient;
 import com.stock.infrastructure.dto.ai.StockAiAnalysisResponse;
 import com.stock.infrastructure.dto.kis.StockPriceResponse;
@@ -16,6 +24,7 @@ import java.time.DayOfWeek;
 import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -29,56 +38,154 @@ public class AiTradingScheduler {
 
     private final UserRepository userRepository;
     private final PortfolioRepository portfolioRepository;
+    private final FavoriteStockRepository favoriteStockRepository;
     private final StockOrderService stockOrderService;
     private final StockPriceService stockPriceService;
     private final AiServerClient aiServerClient;
-
-    private static final List<String> TARGET_STOCKS = List.of(
-            "005930", "000660", "035420", "035720", "005380", "373220", "068270", "000270"
-    );
+    private final StockMasterRepository stockMasterRepository;
+    private final OverseasStockMasterRepository overseasStockMasterRepository;
+    private final BasketRepository basketRepository;
 
     @Scheduled(fixedDelayString = "${app.ai-trading.interval-ms:60000}")
     public void runAiTradingTick() {
-        log.info("Starting AI Autotrading tick execution...");
+        log.info("Starting AI Autotrading tick execution with dynamic news-based stocks...");
         List<User> activeUsers = userRepository.findAllByAiTradingEnabled(true);
         if (activeUsers.isEmpty()) {
             log.info("No active users with AI autotrading enabled.");
             return;
         }
 
-
-
-        // 1. Gather current prices and AI sentiment signals
-        Map<String, StockAiAnalysisResponse> aiSignals = new HashMap<>();
-        Map<String, Integer> stockPrices = new HashMap<>();
-
-        for (String stockCode : TARGET_STOCKS) {
-            try {
-                StockAiAnalysisResponse analysis = aiServerClient.getAiAnalysis(stockCode).block();
-                if (analysis != null) aiSignals.put(stockCode, analysis);
-
-                StockPriceResponse priceResp = stockPriceService.getCurrentPrice(stockCode);
-                if (priceResp != null && priceResp.getStck_prpr() != null) {
-                    stockPrices.put(stockCode, Integer.parseInt(priceResp.getStck_prpr().trim()));
-                }
-            } catch (Exception e) {
-                log.error("Error gathering AI data/price for stockCode={}: {}", stockCode, e.getMessage());
-            }
+        // 1. Fetch recent news from AI server
+        List<com.stock.infrastructure.dto.ai.StockNewsItem> recentNews = new ArrayList<>();
+        try {
+            recentNews = aiServerClient.searchNews("특징주", 30);
+            log.info("Fetched {} news articles for autotrading scan.", recentNews.size());
+        } catch (Exception e) {
+            log.error("Failed to fetch news for autotrading scan: {}", e.getMessage());
         }
 
-        // 2. Perform actions for each active user
+        // 2. Fetch all registered stock masters to match mentions
+        List<StockMaster> domesticMasters = stockMasterRepository.findAll();
+        List<OverseasStockMaster> overseasMasters = overseasStockMasterRepository.findAll();
+
+        Map<String, String> stockNameMap = new HashMap<>(); // stockCode/ticker -> name
+        Set<String> newsMentionedStocks = new HashSet<>();
+
+        for (StockMaster s : domesticMasters) {
+            stockNameMap.put(s.getStockCode(), s.getName());
+        }
+        for (OverseasStockMaster o : overseasMasters) {
+            stockNameMap.put(o.getTicker(), o.getName());
+        }
+
+        // 3. Scan news for stock mentions
+        if (!recentNews.isEmpty()) {
+            for (com.stock.infrastructure.dto.ai.StockNewsItem news : recentNews) {
+                String title = news.getTitle() != null ? news.getTitle() : "";
+                String desc = news.getDescription() != null ? news.getDescription() : "";
+                String searchTarget = (title + " " + desc).toLowerCase();
+
+                // Match domestic stocks
+                for (StockMaster s : domesticMasters) {
+                    String sName = s.getName().toLowerCase();
+                    String sCode = s.getStockCode();
+                    if (searchTarget.contains(sName) || searchTarget.contains(sCode)) {
+                        newsMentionedStocks.add(sCode);
+                    }
+                }
+                // Match overseas stocks
+                for (OverseasStockMaster o : overseasMasters) {
+                    String oName = o.getName().toLowerCase();
+                    String oTicker = o.getTicker().toLowerCase();
+                    if (searchTarget.contains(oName)) {
+                        newsMentionedStocks.add(o.getTicker());
+                    } else {
+                        // Check if oTicker matches as a whole word to prevent false positive matching on substrings (e.g. 'hy' in 'why')
+                        if (searchTarget.matches(".*\\b" + java.util.regex.Pattern.quote(oTicker) + "\\b.*")) {
+                            newsMentionedStocks.add(o.getTicker());
+                        }
+                    }
+                }
+            }
+            log.info("Dynamically identified {} stocks in news: {}", newsMentionedStocks.size(), newsMentionedStocks);
+        }
+
+        // 4. Perform actions for each active user
         for (User user : activeUsers) {
             try {
                 if (user.isMockOrderEnabled() && !isMarketHours()) {
-                    log.info("Market is closed. Skipping AI autotrading tick for User={}", user.getEmail());
-                    continue;
+                    log.info("Market is closed. Evaluating autotrading signals for mock-linked User={} to check for reservations...", user.getEmail());
                 }
-                // Fetch holdings
+
+                // Gather holdings and favorites for this user
                 List<Portfolio> holdings = portfolioRepository.findByUserId(user.getId());
+                List<FavoriteStock> favorites = favoriteStockRepository.findAllByUserIdOrderByCreatedAtDesc(user.getId());
+
+                // Build consolidated target stocks: (news-mentioned) + (user holdings) + (user favorites)
+                Set<String> targetStocks = new HashSet<>(newsMentionedStocks);
+                for (Portfolio h : holdings) {
+                    targetStocks.add(h.getTicker());
+                }
+                for (FavoriteStock f : favorites) {
+                    targetStocks.add(f.getStockCode());
+                }
+
+                // If completely empty, fallback to a small default list
+                if (targetStocks.isEmpty()) {
+                    targetStocks.addAll(List.of("005930", "000660"));
+                }
+
+                // Assign model based on user ID
+                int modelIndex = (int) (Math.abs(user.getId()) % 5);
+                List<String> freeModels = List.of(
+                        "google/gemma-2-9b-it:free",
+                        "meta-llama/llama-3-8b-instruct:free",
+                        "qwen/qwen-2.5-7b-instruct:free",
+                        "mistralai/mistral-7b-instruct:free",
+                        "microsoft/phi-3-medium-128k-intro:free" // Note: can use mistral or phi-3
+                );
+                // Correct model IDs
+                List<String> actualFreeModels = List.of(
+                        "google/gemma-2-9b-it:free",
+                        "meta-llama/llama-3-8b-instruct:free",
+                        "qwen/qwen-2.5-7b-instruct:free",
+                        "mistralai/mistral-7b-instruct:free",
+                        "microsoft/phi-3-medium-128k-instruct:free"
+                );
+                String assignedModel = actualFreeModels.get(modelIndex);
+                log.info("User={} (ID={}) using AI Model: {} to evaluate {} stocks", 
+                        user.getEmail(), user.getId(), assignedModel, targetStocks.size());
+
+                // Gather current prices and AI signals specifically for this user and model
+                Map<String, StockAiAnalysisResponse> aiSignals = new HashMap<>();
+                Map<String, Integer> stockPrices = new HashMap<>();
+
+                for (String stockCode : targetStocks) {
+                    try {
+                        String stockName = stockNameMap.get(stockCode);
+                        StockAiAnalysisResponse analysis = aiServerClient.getAiAnalysis(stockCode, assignedModel, stockName).block();
+                        if (analysis != null) {
+                            aiSignals.put(stockCode, analysis);
+                        }
+
+                        StockPriceResponse priceResp = stockPriceService.getCurrentPrice(stockCode);
+                        if (priceResp != null && priceResp.getStck_prpr() != null) {
+                            stockPrices.put(stockCode, Integer.parseInt(priceResp.getStck_prpr().trim()));
+                        }
+                    } catch (Exception e) {
+                        log.error("Error gathering AI data/price for User={}, stockCode={} using model={}: {}", 
+                                user.getEmail(), stockCode, assignedModel, e.getMessage());
+                    }
+                }
+
+                // Calculate stock value and total assets
                 double stockValue = 0;
                 for (Portfolio h : holdings) {
+                    if (h.getTicker().equalsIgnoreCase("HY") || h.getQuantity() >= 2147483647 || h.getQuantity() <= 0) {
+                        continue;
+                    }
                     Integer currentPrice = stockPrices.get(h.getTicker());
-                    if (currentPrice != null) {
+                    if (currentPrice != null && currentPrice > 0) {
                         stockValue += currentPrice * h.getQuantity();
                     } else {
                         stockValue += h.getAvgPrice() * h.getQuantity();
@@ -86,7 +193,7 @@ public class AiTradingScheduler {
                 }
                 double totalAssets = user.getCashBalance() + stockValue;
 
-                // Risk profiles variables
+                // Risk profile variables
                 double targetAllocationPct; // max stock allocation limit
                 double singleStockCapPct;    // max allocation limit per stock
                 double buyAmtPct = user.getAiTradingAllocationRatio(); // buy size per trade (user custom ratio)
@@ -111,11 +218,14 @@ public class AiTradingScheduler {
                         break;
                 }
 
-                // 3. Stop-loss execution
+                // 2. Stop-loss execution
                 Set<String> soldTickers = new HashSet<>();
                 for (Portfolio h : holdings) {
+                    if (h.getTicker().equalsIgnoreCase("HY") || h.getQuantity() >= 2147483647 || h.getQuantity() <= 0) {
+                        continue;
+                    }
                     Integer price = stockPrices.get(h.getTicker());
-                    if (price == null) continue;
+                    if (price == null || price <= 0) continue;
 
                     double profitRate = ((price - h.getAvgPrice()) / h.getAvgPrice()) * 100;
                     if (profitRate <= stopLossPct) {
@@ -135,13 +245,13 @@ public class AiTradingScheduler {
                 // Recalculate total assets if stop loss occurred
                 totalAssets = user.getCashBalance() + stockValue;
 
-                // 4. Trade signals execution
-                for (String stockCode : TARGET_STOCKS) {
+                // 3. Trade signals execution
+                for (String stockCode : targetStocks) {
                     if (soldTickers.contains(stockCode)) continue;
 
                     StockAiAnalysisResponse analysis = aiSignals.get(stockCode);
                     Integer price = stockPrices.get(stockCode);
-                    if (analysis == null || price == null) continue;
+                    if (analysis == null || price == null || price <= 0) continue;
 
                     String signal = analysis.getSignal();
                     Portfolio holding = holdings.stream()
@@ -173,21 +283,39 @@ public class AiTradingScheduler {
 
                             double totalCost = (double) price * buyQty;
                             if (user.getCashBalance() >= totalCost) {
-                                log.info("AI Auto-Buy: User={}, Stock={}, Qty={}, Price={}, TotalCost={}", 
-                                        user.getEmail(), stockCode, buyQty, price, totalCost);
-                                stockOrderService.buy(user.getEmail(), stockCode, buyQty, price, "AI", analysis.getReason());
-                                stockValue += totalCost;
+                                if (user.isMockOrderEnabled() && !isMarketHours()) {
+                                    // 장외 시간대이므로 예약 매수로 등록
+                                    if (!basketRepository.existsByUserIdAndStockCode(user.getId(), stockCode)) {
+                                        String stockName = stockNameMap.get(stockCode);
+                                        if (stockName == null) stockName = stockCode;
+                                        BasketItem reservation = new BasketItem(user.getId(), stockCode, stockName, price, 10);
+                                        reservation.setActive(true);
+                                        basketRepository.save(reservation);
+                                        log.info("AI Auto-Reservation (Outside Market Hours): User={}, Stock={}, TargetPrice={} using model={}", 
+                                                user.getEmail(), stockCode, price, assignedModel);
+                                    }
+                                } else {
+                                    log.info("AI Auto-Buy: User={}, Stock={}, Qty={}, Price={}, TotalCost={} using model={}", 
+                                            user.getEmail(), stockCode, buyQty, price, totalCost, assignedModel);
+                                    stockOrderService.buy(user.getEmail(), stockCode, buyQty, price, "AI", analysis.getReason());
+                                    stockValue += totalCost;
+                                }
                             }
                         } else if ("SELL".equals(signal)) {
                             if (holding != null && holding.getQuantity() > 0) {
-                                log.info("AI Auto-Sell (Signal): User={}, Stock={}, Qty={}, Price={}", 
-                                        user.getEmail(), stockCode, holding.getQuantity(), price);
-                                stockOrderService.sell(user.getEmail(), stockCode, holding.getQuantity(), price, "AI", analysis.getReason());
+                                if (user.isMockOrderEnabled() && !isMarketHours()) {
+                                    log.info("AI Auto-Sell Signal received outside market hours (Skipping order): User={}, Stock={}, Qty={}, Price={} using model={}", 
+                                            user.getEmail(), stockCode, holding.getQuantity(), price, assignedModel);
+                                } else {
+                                    log.info("AI Auto-Sell (Signal): User={}, Stock={}, Qty={}, Price={} using model={}", 
+                                            user.getEmail(), stockCode, holding.getQuantity(), price, assignedModel);
+                                    stockOrderService.sell(user.getEmail(), stockCode, holding.getQuantity(), price, "AI", analysis.getReason());
+                                }
                             }
                         }
                     } catch (Exception e) {
-                        log.error("AI Auto-Trade execution failed for User={}, Stock={}, Signal={}: {}", 
-                                user.getEmail(), stockCode, signal, e.getMessage());
+                        log.error("AI Auto-Trade execution failed for User={}, Stock={}, Signal={} using model={}: {}", 
+                                user.getEmail(), stockCode, signal, assignedModel, e.getMessage());
                     }
                 }
             } catch (Exception e) {

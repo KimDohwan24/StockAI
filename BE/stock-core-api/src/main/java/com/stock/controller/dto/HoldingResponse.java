@@ -8,5 +8,6 @@ public record HoldingResponse(
         double avgPrice,
         double currentPrice,
         double profitLoss,
-        double profitRate
+        double profitRate,
+        boolean isReservation
 ) {}

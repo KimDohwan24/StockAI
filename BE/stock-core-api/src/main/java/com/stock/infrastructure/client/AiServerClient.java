@@ -60,21 +60,58 @@ public class AiServerClient {
     }
 
     public Mono<com.stock.infrastructure.dto.ai.StockAiAnalysisResponse> getAiAnalysis(String ticker) {
-        log.debug("Calling AI analysis for ticker={}", ticker);
+        return getAiAnalysis(ticker, null, null);
+    }
+
+    public Mono<com.stock.infrastructure.dto.ai.StockAiAnalysisResponse> getAiAnalysis(String ticker, String modelName) {
+        return getAiAnalysis(ticker, modelName, null);
+    }
+
+    public Mono<com.stock.infrastructure.dto.ai.StockAiAnalysisResponse> getAiAnalysis(String ticker, String modelName, String name) {
+        log.debug("Calling AI analysis for ticker={} with model={}, name={}", ticker, modelName, name);
+        return aiServerWebClient
+                .get()
+                .uri(uriBuilder -> {
+                    var builder = uriBuilder
+                            .path("/api/v1/recommend/analysis")
+                            .queryParam("ticker", ticker);
+                    if (name != null && !name.isBlank()) {
+                        builder.queryParam("name", name);
+                    }
+                    if (modelName != null && !modelName.isBlank()) {
+                        builder.queryParam("model", modelName);
+                    }
+                    return builder.build();
+                })
+                .retrieve()
+                .onStatus(status -> status.isError(),
+                        clientResponse -> clientResponse.bodyToMono(String.class)
+                                .flatMap(body -> {
+                                    log.error("AI analysis API error for ticker={} with model={}, name={}: {}", ticker, modelName, name, body);
+                                    return Mono.error(new RuntimeException("AI analysis API error: " + body));
+                                }))
+                .bodyToMono(com.stock.infrastructure.dto.ai.StockAiAnalysisResponse.class);
+    }
+
+    public java.util.List<com.stock.infrastructure.dto.ai.StockNewsItem> searchNews(String query, int limit) {
+        log.debug("Calling AI news search for query={}, limit={}", query, limit);
         return aiServerWebClient
                 .get()
                 .uri(uriBuilder -> uriBuilder
-                        .path("/api/v1/recommend/analysis")
-                        .queryParam("ticker", ticker)
+                        .path("/api/v1/recommend/news/search")
+                        .queryParam("query", query)
+                        .queryParam("limit", limit)
                         .build())
                 .retrieve()
                 .onStatus(status -> status.isError(),
                         clientResponse -> clientResponse.bodyToMono(String.class)
                                 .flatMap(body -> {
-                                    log.error("AI analysis API error for ticker={}: {}", ticker, body);
-                                    return Mono.error(new RuntimeException("AI analysis API error: " + body));
+                                    log.error("AI news search API error for query={}: {}", query, body);
+                                    return Mono.error(new RuntimeException("AI news search API error: " + body));
                                 }))
-                .bodyToMono(com.stock.infrastructure.dto.ai.StockAiAnalysisResponse.class);
+                .bodyToFlux(com.stock.infrastructure.dto.ai.StockNewsItem.class)
+                .collectList()
+                .block();
     }
 
     public Mono<com.stock.infrastructure.dto.ai.DashboardRecommendationsResponse> getDashboardRecommendations(String market) {

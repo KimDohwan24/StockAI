@@ -196,12 +196,6 @@ export default function Navbar() {
         <div className="flex items-center gap-4 md:gap-6">
           <div className="flex items-center gap-3">
             <Link href="/" className="text-xl font-bold tracking-tight text-meta-blue">StockAI</Link>
-            {mockOrderEnabled && (
-              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-meta-blue/10 text-meta-blue border border-meta-blue/20 whitespace-nowrap">
-                <span className="w-1.5 h-1.5 rounded-full bg-meta-blue animate-pulse" />
-                한투 모의투자 연동
-              </span>
-            )}
           </div>
           <div className="hidden md:flex items-center gap-1">
             <Link

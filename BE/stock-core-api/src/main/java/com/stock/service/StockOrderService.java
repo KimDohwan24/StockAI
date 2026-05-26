@@ -15,8 +15,12 @@ import com.stock.infrastructure.dto.kis.OrderResponse;
 import com.stock.domain.notification.Notification;
 import com.stock.domain.notification.NotificationRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import com.stock.domain.overseas.OverseasStockMaster;
+import com.stock.domain.overseas.OverseasStockMasterRepository;
 
 @Service
 @RequiredArgsConstructor
@@ -29,30 +33,15 @@ public class StockOrderService {
     private final StockMasterRepository stockMasterRepository;
     private final OrderHistoryRepository orderHistoryRepository;
     private final NotificationRepository notificationRepository;
-
-    private static final java.util.Map<String, String> STOCK_NAME_FALLBACK = java.util.Map.ofEntries(
-            java.util.Map.entry("005930", "삼성전자"),
-            java.util.Map.entry("000660", "SK하이닉스"),
-            java.util.Map.entry("035420", "네이버"),
-            java.util.Map.entry("035720", "카카오"),
-            java.util.Map.entry("005380", "현대차"),
-            java.util.Map.entry("373220", "LG에너지솔루션"),
-            java.util.Map.entry("068270", "셀트리온"),
-            java.util.Map.entry("000270", "기아"),
-            java.util.Map.entry("AAPL", "애플"),
-            java.util.Map.entry("TSLA", "테슬라"),
-            java.util.Map.entry("MSFT", "마이크로소프트"),
-            java.util.Map.entry("NVDA", "엔비디아"),
-            java.util.Map.entry("AMZN", "아마존"),
-            java.util.Map.entry("GOOGL", "구글"),
-            java.util.Map.entry("META", "메타"),
-            java.util.Map.entry("NFLX", "넷플릭스")
-    );
+    private final SimpMessagingTemplate messagingTemplate;
+    private final OverseasStockMasterRepository overseasStockMasterRepository;
 
     private String resolveStockName(String stockCode) {
         return stockMasterRepository.findByStockCode(stockCode)
-                .map(com.stock.domain.stock.StockMaster::getName)
-                .orElseGet(() -> STOCK_NAME_FALLBACK.getOrDefault(stockCode, stockCode));
+                .map(StockMaster::getName)
+                .or(() -> overseasStockMasterRepository.findFirstByTicker(stockCode)
+                        .map(OverseasStockMaster::getName))
+                .orElse(stockCode);
     }
 
     @Transactional
@@ -122,6 +111,9 @@ public class StockOrderService {
         String buyMsg = String.format("%s (%s) %d주 매수 주문이 체결되었습니다. (단가: %,d원, 주문주체: %s)",
                 stockName, stockCode, quantity, (long)price, orderedBy.equals("AI") ? "🤖 AI" : "사용자");
         notificationRepository.save(new Notification(user.getId(), buyMsg));
+
+        // AI/User 매매 실시간 웹소켓 이벤트 발행
+        messagingTemplate.convertAndSend("/topic/ai-trade-event", "AiTradeOccurred");
 
         return response;
     }
@@ -193,6 +185,9 @@ public class StockOrderService {
         String sellMsg = String.format("%s (%s) %d주 매도 주문이 체결되었습니다. (단가: %,d원, 주문주체: %s)",
                 stockName, stockCode, quantity, (long)price, orderedBy.equals("AI") ? "🤖 AI" : "사용자");
         notificationRepository.save(new Notification(user.getId(), sellMsg));
+
+        // AI/User 매매 실시간 웹소켓 이벤트 발행
+        messagingTemplate.convertAndSend("/topic/ai-trade-event", "AiTradeOccurred");
 
         return response;
     }

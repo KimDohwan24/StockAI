@@ -6,6 +6,7 @@ import com.stock.domain.entity.User;
 import com.stock.domain.portfolio.Portfolio;
 import com.stock.domain.portfolio.PortfolioRepository;
 import com.stock.domain.repository.UserRepository;
+import com.stock.domain.basket.BasketRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -22,6 +23,7 @@ public class PortfolioService {
     private final UserRepository userRepository;
     private final StockPriceService stockPriceService;
     private final OverseasStockPriceService overseasStockPriceService;
+    private final BasketRepository basketRepository;
 
     @Transactional(readOnly = true)
     public PortfolioResponse getPortfolioSummary(String email) {
@@ -30,6 +32,9 @@ public class PortfolioService {
 
         double totalHoldingsValue = 0.0;
         for (Portfolio p : holdings) {
+            if (p.getTicker().equalsIgnoreCase("HY") || p.getQuantity() >= 2147483647 || p.getQuantity() <= 0) {
+                continue;
+            }
             double currentPrice = getCurrentPrice(p);
             totalHoldingsValue += currentPrice * p.getQuantity();
         }
@@ -71,13 +76,18 @@ public class PortfolioService {
     public List<HoldingResponse> getHoldings(String email) {
         User user = getUser(email);
         List<Portfolio> holdings = portfolioRepository.findByUserId(user.getId());
+        List<HoldingResponse> responseList = new java.util.ArrayList<>();
 
-        return holdings.stream().map(p -> {
+        // 1. Process actual holdings
+        for (Portfolio p : holdings) {
+            if (p.getTicker().equalsIgnoreCase("HY") || p.getQuantity() >= 2147483647 || p.getQuantity() <= 0) {
+                continue;
+            }
             double currentPrice = getCurrentPrice(p);
             double profitLoss = (currentPrice - p.getAvgPrice()) * p.getQuantity();
             double profitRate = p.getAvgPrice() > 0 ? ((currentPrice - p.getAvgPrice()) / p.getAvgPrice()) * 100.0 : 0.0;
 
-            return new HoldingResponse(
+            responseList.add(new HoldingResponse(
                     p.getId(),
                     p.getTicker(),
                     p.getStockName(),
@@ -85,9 +95,45 @@ public class PortfolioService {
                     p.getAvgPrice(),
                     currentPrice,
                     profitLoss,
-                    profitRate
-            );
-        }).toList();
+                    profitRate,
+                    false
+            ));
+        }
+
+        // 2. Process active reservations (basket items)
+        try {
+            List<com.stock.domain.basket.BasketItem> activeBaskets = basketRepository.findAllByUserId(user.getId()).stream()
+                    .filter(com.stock.domain.basket.BasketItem::isActive)
+                    .toList();
+
+            for (com.stock.domain.basket.BasketItem item : activeBaskets) {
+                double currentPrice = 0.0;
+                try {
+                    var priceResponse = stockPriceService.getCurrentPrice(item.getStockCode());
+                    if (priceResponse != null && priceResponse.getStck_prpr() != null) {
+                        currentPrice = Double.parseDouble(priceResponse.getStck_prpr());
+                    }
+                } catch (Exception e) {
+                    // Ignore
+                }
+
+                responseList.add(new HoldingResponse(
+                        item.getId(),
+                        item.getStockCode(),
+                        item.getStockName() + " (예약)",
+                        0,
+                        item.getTargetPrice(),
+                        currentPrice,
+                        0.0,
+                        0.0,
+                        true
+                ));
+            }
+        } catch (Exception e) {
+            log.error("Failed to load active basket reservations for holding list: {}", e.getMessage());
+        }
+
+        return responseList;
     }
 
     private double getCurrentPrice(Portfolio p) {

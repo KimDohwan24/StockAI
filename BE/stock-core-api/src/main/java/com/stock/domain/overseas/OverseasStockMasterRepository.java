@@ -19,6 +19,7 @@ public interface OverseasStockMasterRepository extends JpaRepository<OverseasSto
     Page<OverseasStockMaster> findByNameContainingOrTickerContaining(String name, String ticker, Pageable pageable);
     List<OverseasStockMaster> findAllByExchangeCode(ExchangeCode exchangeCode);
     Optional<OverseasStockMaster> findByTickerAndExchangeCode(String ticker, ExchangeCode exchangeCode);
+    Optional<OverseasStockMaster> findFirstByTicker(String ticker);
     List<OverseasStockMaster> findByTickerInAndExchangeCode(List<String> tickers, ExchangeCode exchangeCode);
 
     @Query("SELECT o FROM OverseasStockMaster o WHERE o.ticker IN :tickers AND o.exchangeCode IN :exchangeCodes")

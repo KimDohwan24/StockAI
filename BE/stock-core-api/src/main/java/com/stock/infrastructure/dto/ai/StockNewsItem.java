@@ -8,6 +8,7 @@ public class StockNewsItem {
     private String link;
     private String source;
     private String pubDate;
+    private String description;
     private String sentiment; // positive, negative, neutral
     private double sentimentScore;
     private double confidence;

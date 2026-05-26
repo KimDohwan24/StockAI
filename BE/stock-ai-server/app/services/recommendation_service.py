@@ -162,16 +162,17 @@ class RecommendationService:
 
         return summary
 
-    async def get_ai_signal(self, ticker: str) -> dict:
+    async def get_ai_signal(self, ticker: str, model_name: str | None = None, stock_name: str | None = None) -> dict:
         """
         종목 코드로 실시간 뉴스를 검색하고 감성을 평가하여 AI 투자 점수 및 상세 분석을 산출합니다.
         """
         # 1. 한글 종목명 매핑
-        is_domestic = ticker.isdigit()
-        if is_domestic:
-            stock_name = DOMESTIC_STOCKS.get(ticker, ticker)
-        else:
-            stock_name = OVERSEAS_STOCKS.get(ticker, ticker)
+        if not stock_name:
+            is_domestic = ticker.isdigit()
+            if is_domestic:
+                stock_name = DOMESTIC_STOCKS.get(ticker, ticker)
+            else:
+                stock_name = OVERSEAS_STOCKS.get(ticker, ticker)
 
         # 2. 뉴스 검색
         news_list = await self.news_service.search_news(stock_name, limit=10)
@@ -184,7 +185,7 @@ class RecommendationService:
 
         if news_list:
             texts = [n["description"] or n["title"] for n in news_list]
-            s_results = await self.sentiment_service.analyze_batch(texts)
+            s_results = await self.sentiment_service.analyze_batch(texts, model_name)
 
             total_score = 0.0
             for item, s_res in zip(news_list, s_results):

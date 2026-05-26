@@ -35,7 +35,7 @@ class NLPModel:
             logger.info(f"Using OpenRouter LLM API: {self.model_name}")
         self._loaded = True
 
-    async def predict(self, text: str) -> tuple[float, float]:
+    async def predict(self, text: str, model_name: str | None = None) -> tuple[float, float]:
         """
         감성 점수와 신뢰도를 반환 (비동기)
         Returns:
@@ -43,6 +43,8 @@ class NLPModel:
         """
         if not self._loaded:
             raise RuntimeError("Model is not loaded yet")
+
+        target_model = model_name or self.model_name
 
         if not self.api_key:
             # Mock mode fallback (시드 고정으로 재현 가능)
@@ -68,7 +70,7 @@ class NLPModel:
         )
 
         payload = {
-            "model": self.model_name,
+            "model": target_model,
             "messages": [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": text}
@@ -77,6 +79,7 @@ class NLPModel:
         }
 
         try:
+            logger.info(f"Calling OpenRouter API with model: {target_model}")
             async with httpx.AsyncClient(timeout=10.0) as client:
                 response = await client.post(url, headers=headers, json=payload)
                 response.raise_for_status()
@@ -97,12 +100,12 @@ class NLPModel:
                 
                 return score, confidence
         except Exception as e:
-            logger.error(f"OpenRouter API call failed: {str(e)}. Falling back to mock prediction.")
+            logger.error(f"OpenRouter API call failed for model {target_model}: {str(e)}. Falling back to mock prediction.")
             score = round(random.uniform(-1.0, 1.0), 4)
             confidence = round(random.uniform(0.7, 1.0), 4)
             return score, confidence
 
-    async def predict_batch(self, texts: list[str]) -> list[tuple[float, float]]:
+    async def predict_batch(self, texts: list[str], model_name: str | None = None) -> list[tuple[float, float]]:
         """
         여러 텍스트의 감성 점수와 신뢰도를 비동기로 병렬 처리하여 반환
         Returns:
@@ -112,5 +115,5 @@ class NLPModel:
             raise RuntimeError("Model is not loaded yet")
 
         # Gather predictions concurrently for high speed
-        tasks = [self.predict(text) for text in texts]
+        tasks = [self.predict(text, model_name) for text in texts]
         return await asyncio.gather(*tasks)

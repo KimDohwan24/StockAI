@@ -27,6 +27,9 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import com.stock.domain.overseas.OverseasStockMaster;
+import com.stock.domain.overseas.OverseasStockMasterRepository;
+
 @Slf4j
 @Component
 public class KisWebSocketClient {
@@ -47,25 +50,7 @@ public class KisWebSocketClient {
     private final CacheManager cacheManager;
     private final StockMasterPriceUpdater stockMasterPriceUpdater;
     private final StockMasterRepository stockMasterRepository;
-
-    private static final java.util.Map<String, String> STOCK_NAME_FALLBACK = java.util.Map.ofEntries(
-            java.util.Map.entry("005930", "삼성전자"),
-            java.util.Map.entry("000660", "SK하이닉스"),
-            java.util.Map.entry("035420", "네이버"),
-            java.util.Map.entry("035720", "카카오"),
-            java.util.Map.entry("005380", "현대차"),
-            java.util.Map.entry("373220", "LG에너지솔루션"),
-            java.util.Map.entry("068270", "셀트리온"),
-            java.util.Map.entry("000270", "기아"),
-            java.util.Map.entry("AAPL", "애플"),
-            java.util.Map.entry("TSLA", "테슬라"),
-            java.util.Map.entry("MSFT", "마이크로소프트"),
-            java.util.Map.entry("NVDA", "엔비디아"),
-            java.util.Map.entry("AMZN", "아마존"),
-            java.util.Map.entry("GOOGL", "구글"),
-            java.util.Map.entry("META", "메타"),
-            java.util.Map.entry("NFLX", "넷플릭스")
-    );
+    private final OverseasStockMasterRepository overseasStockMasterRepository;
 
     private volatile KisWsClient wsClient;
     private volatile boolean running = false;
@@ -90,7 +75,8 @@ public class KisWebSocketClient {
                               ObjectMapper objectMapper,
                               CacheManager cacheManager,
                               StockMasterPriceUpdater stockMasterPriceUpdater,
-                              StockMasterRepository stockMasterRepository) {
+                              StockMasterRepository stockMasterRepository,
+                              OverseasStockMasterRepository overseasStockMasterRepository) {
         this.kisConfig = kisConfig;
         this.kisAuthService = kisAuthService;
         this.messagingTemplate = messagingTemplate;
@@ -98,6 +84,7 @@ public class KisWebSocketClient {
         this.cacheManager = cacheManager;
         this.stockMasterPriceUpdater = stockMasterPriceUpdater;
         this.stockMasterRepository = stockMasterRepository;
+        this.overseasStockMasterRepository = overseasStockMasterRepository;
     }
 
     @PostConstruct
@@ -346,7 +333,9 @@ public class KisWebSocketClient {
                 // Resolve and set stock name to prevent cached data from losing the stock name
                 String resolvedName = stockMasterRepository.findByStockCode(stockCode)
                         .map(com.stock.domain.stock.StockMaster::getName)
-                        .orElseGet(() -> STOCK_NAME_FALLBACK.getOrDefault(stockCode, stockCode));
+                        .or(() -> overseasStockMasterRepository.findFirstByTicker(stockCode)
+                                .map(OverseasStockMaster::getName))
+                        .orElse(stockCode);
                 response.setHts_kor_isnm(resolvedName);
                 
                 priceCache.put(stockCode, response);

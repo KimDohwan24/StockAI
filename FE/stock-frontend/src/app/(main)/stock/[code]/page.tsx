@@ -162,11 +162,34 @@ function TradePanel({
 
   const totalAmount = currentPrice * finalQuantity;
 
+  const isMarketHours = () => {
+    const seoulTime = new Date().toLocaleString("en-US", { timeZone: "Asia/Seoul" });
+    const date = new Date(seoulTime);
+    const day = date.getDay(); // 0 = Sunday, 6 = Saturday
+    if (day === 0 || day === 6) return false;
+    
+    const hours = date.getHours();
+    const minutes = date.getMinutes();
+    const timeVal = hours * 100 + minutes;
+    return timeVal >= 900 && timeVal <= 1530;
+  };
+
   const handleOrder = async () => {
     if (finalQuantity <= 0) return;
     setOrderLoading(true);
     setOrderMsg(null);
     try {
+      if (side === 'buy' && mockOrderEnabled && !isMarketHours()) {
+        // Register as basket reservation item instead
+        await addBasketItem(stockCode, priceInfo?.price ?? 0, 10);
+        mutate('user-basket-items');
+        setOrderMsg({
+          type: 'success',
+          text: `장외 시간대이므로 현재가(${fmt(priceInfo?.price ?? 0)}원) 기준 예약 매수(장바구니)로 성공적으로 등록되었습니다.`,
+        });
+        return;
+      }
+
       let result: OrderResult;
       if (side === 'buy') {
         result = await buyOrder(stockCode, finalQuantity, priceInfo?.price ?? 0);
@@ -325,7 +348,9 @@ function TradePanel({
       >
         {orderLoading
           ? '주문 중...'
-          : `${side === 'buy' ? '매수' : '매도'} ${fmt(totalAmount)}원`}
+          : side === 'buy' && mockOrderEnabled && !isMarketHours()
+            ? '장외 예약 매수 등록'
+            : `${side === 'buy' ? '매수' : '매도'} ${fmt(totalAmount)}원`}
       </button>
     </div>
   );

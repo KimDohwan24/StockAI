@@ -4,6 +4,7 @@ import { useEffect, useState, Fragment } from 'react';
 import { useRouter } from 'next/navigation';
 import useSWR from 'swr';
 import { useAuth } from '@/lib/auth';
+import { wsManager } from '@/lib/websocket';
 import { getAdminAiStatus, AdminAiStatusResponse, resetAiAccounts, toggleUserMockOrder, toggleUserAiTrading, syncDomesticStocks, syncOverseasStocks, syncNaverNews, updateUserInitialBalance } from '@/lib/api';
 import {
   Cpu,
@@ -53,7 +54,7 @@ const getStockDetailUrl = (code: string) => {
 export default function AdminAiMonitoringPage() {
   const router = useRouter();
   const { isAuthenticated, isLoading: authLoading, user } = useAuth();
-  const [activeTab, setActiveTab] = useState<'all' | 'high' | 'medium' | 'low'>('all');
+  const [activeTab, setActiveTab] = useState<'all' | 'high' | 'medium' | 'low' | 'mock' | 'local'>('all');
 
   // Redirect if not authenticated or not an admin
   useEffect(() => {
@@ -72,6 +73,19 @@ export default function AdminAiMonitoringPage() {
     getAdminAiStatus,
     { refreshInterval: 10000, dedupingInterval: 5000 }
   );
+
+  // AI 매매 이벤트 실시간 감지하여 자동 새로고침(mutate)
+  useEffect(() => {
+    if (isAuthenticated && user?.role === 'ADMIN') {
+      const subId = wsManager.subscribe('/topic/ai-trade-event', (message) => {
+        console.log('AI Trade Event Received via WebSocket, refreshing data...', message.body);
+        mutate();
+      });
+      return () => {
+        wsManager.unsubscribe(subId);
+      };
+    }
+  }, [isAuthenticated, user, mutate]);
 
   const [resetting, setResetting] = useState(false);
   const [expandedReasons, setExpandedReasons] = useState<Record<number, boolean>>({});
@@ -152,6 +166,78 @@ export default function AdminAiMonitoringPage() {
       alert(`동기화 실패: ${msg || '알 수 없는 오류가 발생했습니다.'}`);
     } finally {
       setSyncingNews(false);
+    }
+  };
+
+  const handleSaveHistory = () => {
+    if (!aiStatusList || aiStatusList.length === 0) {
+      alert('저장할 AI 데이터가 없습니다.');
+      return;
+    }
+
+    try {
+      const raw = localStorage.getItem('ai_history_records');
+      const history = raw ? JSON.parse(raw) : [];
+
+      const snapshot = {
+        id: Date.now(),
+        savedAt: new Date().toISOString(),
+        summary: {
+          totalAsset: aiStatusList.reduce((acc: number, curr: any) => acc + (curr.portfolio?.totalAssetValue ?? 0), 0),
+          totalInitial: aiStatusList.reduce((acc: number, curr: any) => acc + (curr.portfolio?.initialBalance ?? 0), 0),
+          activeCount: aiStatusList.filter((a: any) => a.profile.aiTradingEnabled).length,
+          totalOrders: aiStatusList.reduce((acc: number, curr: any) => acc + (curr.orderHistory?.length ?? 0), 0),
+        },
+        records: aiStatusList.map((ai: any) => {
+          const FREE_MODELS_LABELS = [
+            "Google Gemma 2",
+            "Meta Llama 3",
+            "Alibaba Qwen 2.5",
+            "Mistral 7B",
+            "Microsoft Phi-3"
+          ];
+          const modelIndex = Math.abs(ai.profile.id) % 5;
+          const assignedModel = FREE_MODELS_LABELS[modelIndex];
+
+          return {
+            profile: {
+              id: ai.profile.id,
+              email: ai.profile.email,
+              name: ai.profile.name,
+              riskProfile: ai.profile.riskProfile,
+              aiTradingEnabled: ai.profile.aiTradingEnabled,
+              mockOrderEnabled: ai.profile.mockOrderEnabled,
+              aiTradingAllocationRatio: ai.profile.aiTradingAllocationRatio,
+              assignedModel: assignedModel
+            },
+            portfolio: ai.portfolio ? {
+              initialBalance: ai.portfolio.initialBalance,
+              cashBalance: ai.portfolio.cashBalance,
+              totalAssetValue: ai.portfolio.totalAssetValue,
+            } : null,
+            holdings: ai.holdings ? ai.holdings.map((h: any) => ({
+              stockCode: h.stockCode,
+              stockName: h.stockName,
+              quantity: h.quantity,
+              avgPrice: h.avgPrice,
+              currentPrice: h.currentPrice,
+              profitLoss: h.profitLoss,
+              profitRate: h.profitRate,
+            })) : [],
+            orderCount: ai.orderHistory?.length ?? 0
+          };
+        })
+      };
+
+      history.unshift(snapshot);
+      localStorage.setItem('ai_history_records', JSON.stringify(history));
+
+      if (window.confirm('현재 AI 투자 자산 및 계좌 현황 기록이 성공적으로 저장되었습니다!\nAI 히스토리 기록 조회 페이지로 이동하시겠습니까?')) {
+        router.push('/admin/ai-history');
+      }
+    } catch (e) {
+      console.error(e);
+      alert('기록 저장 중 오류가 발생했습니다.');
     }
   };
 
@@ -275,6 +361,8 @@ export default function AdminAiMonitoringPage() {
     if (activeTab === 'high') return list.filter((a) => a.profile.riskProfile === 'HIGH');
     if (activeTab === 'medium') return list.filter((a) => a.profile.riskProfile === 'MEDIUM');
     if (activeTab === 'low') return list.filter((a) => a.profile.riskProfile === 'LOW');
+    if (activeTab === 'mock') return list.filter((a) => a.profile.mockOrderEnabled);
+    if (activeTab === 'local') return list.filter((a) => !a.profile.mockOrderEnabled);
     return list;
   };
 
@@ -282,7 +370,7 @@ export default function AdminAiMonitoringPage() {
     <div className="min-h-screen bg-canvas text-ink">
       <main className="max-w-7xl mx-auto px-6 py-12 space-y-12">
         {/* Header */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-4">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div>
             <div className="flex items-center gap-2 mb-1.5">
               <span className="flex h-2.5 w-2.5 relative">
@@ -297,44 +385,67 @@ export default function AdminAiMonitoringPage() {
             </h1>
             <p className="text-steel text-sm mt-1">{list.length}개 AI 투자 에이전트의 현황과 계좌 상태를 실시간 감시합니다.</p>
           </div>
-          <div className="flex flex-wrap items-center gap-3 self-start md:self-auto">
-            <button
-              onClick={handleReset}
-              disabled={resetting}
-              className="flex items-center justify-center gap-2 px-5 py-2.5 bg-rose-50 border border-rose-200 hover:bg-rose-100 hover:border-rose-300 disabled:opacity-50 disabled:cursor-not-allowed transition-all rounded-meta-full text-sm font-bold text-rose-600 shadow-sm cursor-pointer"
-            >
-              <RotateCcw className={`w-4 h-4 text-rose-500 ${resetting ? 'animate-spin' : ''}`} />
-              {resetting ? '초기화 중...' : 'AI 계정 전체 초기화'}
-            </button>
-            <button
-              onClick={handleSyncDomestic}
-              disabled={syncingDomestic}
-              className="flex items-center justify-center gap-2 px-5 py-2.5 bg-blue-50 border border-blue-200 hover:bg-blue-100 hover:border-blue-300 disabled:opacity-50 disabled:cursor-not-allowed transition-all rounded-meta-full text-sm font-bold text-blue-600 shadow-sm cursor-pointer"
-            >
-              <RefreshCw className={`w-4 h-4 text-blue-500 ${syncingDomestic ? 'animate-spin' : ''}`} />
-              {syncingDomestic ? '국내 주식 동기화 중...' : '국내 주식 동기화'}
-            </button>
+        </div>
+
+        {/* Action Buttons Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <button
+            onClick={handleReset}
+            disabled={resetting}
+            className="flex items-center justify-center shrink-0 gap-2 px-6 py-3.5 bg-rose-50 border border-rose-200 hover:bg-rose-100 hover:border-rose-300 disabled:opacity-50 disabled:cursor-not-allowed transition-all rounded-xl text-sm font-bold text-rose-600 shadow-sm cursor-pointer w-full whitespace-nowrap"
+          >
+            <RotateCcw className={`w-4 h-4 text-rose-500 ${resetting ? 'animate-spin' : ''}`} />
+            {resetting ? '초기화 중...' : '전체 초기화'}
+          </button>
+          
+          <button
+            onClick={handleSyncDomestic}
+            disabled={syncingDomestic}
+            className="flex items-center justify-center shrink-0 gap-2 px-6 py-3.5 bg-blue-50 border border-blue-200 hover:bg-blue-100 hover:border-blue-300 disabled:opacity-50 disabled:cursor-not-allowed transition-all rounded-xl text-sm font-bold text-blue-600 shadow-sm cursor-pointer w-full whitespace-nowrap"
+          >
+            <RefreshCw className={`w-4 h-4 text-blue-500 ${syncingDomestic ? 'animate-spin' : ''}`} />
+            {syncingDomestic ? '국내 동기화 중...' : '국내 동기화'}
+          </button>
+
+          <div className="flex gap-2 w-full">
             <button
               onClick={handleSyncOverseas}
               disabled={syncingOverseas}
-              className="flex items-center justify-center gap-2 px-5 py-2.5 bg-purple-50 border border-purple-200 hover:bg-purple-100 hover:border-purple-300 disabled:opacity-50 disabled:cursor-not-allowed transition-all rounded-meta-full text-sm font-bold text-purple-600 shadow-sm cursor-pointer"
+              className="flex-1 flex items-center justify-center gap-2 px-3 py-3.5 bg-purple-50 border border-purple-200 hover:bg-purple-100 hover:border-purple-300 disabled:opacity-50 disabled:cursor-not-allowed transition-all rounded-xl text-[13px] font-bold text-purple-600 shadow-sm cursor-pointer whitespace-nowrap"
             >
               <Globe className={`w-4 h-4 text-purple-500 ${syncingOverseas ? 'animate-spin' : ''}`} />
-              {syncingOverseas ? '해외 주식 동기화 중...' : '해외 주식 동기화'}
+              {syncingOverseas ? '해외...' : '해외 동기화'}
             </button>
             <button
               onClick={handleSyncNews}
               disabled={syncingNews}
-              className="flex items-center justify-center gap-2 px-5 py-2.5 bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 hover:border-emerald-300 disabled:opacity-50 disabled:cursor-not-allowed transition-all rounded-meta-full text-sm font-bold text-emerald-600 shadow-sm cursor-pointer"
+              className="flex-1 flex items-center justify-center gap-2 px-3 py-3.5 bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 hover:border-emerald-300 disabled:opacity-50 disabled:cursor-not-allowed transition-all rounded-xl text-[13px] font-bold text-emerald-600 shadow-sm cursor-pointer whitespace-nowrap"
             >
               <Newspaper className={`w-4 h-4 text-emerald-500 ${syncingNews ? 'animate-pulse' : ''}`} />
-              {syncingNews ? '네이버 뉴스 동기화 중...' : '네이버 뉴스 동기화'}
+              {syncingNews ? '뉴스...' : '뉴스 동기화'}
             </button>
+          </div>
+
+          <div className="flex gap-2 w-full">
+            <button
+              onClick={handleSaveHistory}
+              className="flex-1 flex items-center justify-center gap-1.5 px-2 py-3.5 bg-indigo-600 hover:bg-indigo-700 hover:shadow-indigo-100 transition-all rounded-xl text-xs font-bold text-white shadow-sm cursor-pointer whitespace-nowrap"
+            >
+              <History className="w-3.5 h-3.5 text-white" />
+              기록 저장
+            </button>
+            <Link
+              href="/admin/ai-history"
+              className="flex-1 flex items-center justify-center gap-1.5 px-2 py-3.5 bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 hover:border-indigo-300 transition-all rounded-xl text-xs font-bold text-indigo-600 shadow-sm cursor-pointer whitespace-nowrap"
+            >
+              <History className="w-3.5 h-3.5 text-indigo-500" />
+              히스토리
+            </Link>
             <button
               onClick={() => mutate()}
-              className="flex items-center justify-center gap-2 px-5 py-2.5 bg-white border border-hairline-soft hover:bg-surface-soft transition-colors rounded-meta-full text-sm font-bold shadow-sm cursor-pointer"
+              className="flex-1 flex items-center justify-center gap-1.5 px-2 py-3.5 bg-white border border-hairline-soft hover:bg-surface-soft transition-colors rounded-xl text-xs font-bold shadow-sm cursor-pointer whitespace-nowrap"
             >
-              <RefreshCw className="w-4 h-4 text-steel" />
+              <RefreshCw className="w-3.5 h-3.5 text-steel" />
               새로고침
             </button>
           </div>
@@ -398,17 +509,19 @@ export default function AdminAiMonitoringPage() {
         </div>
 
         {/* Tab Buttons */}
-        <div className="flex border-b border-hairline-soft gap-2">
+        <div className="flex border-b border-hairline-soft gap-2 overflow-x-auto scrollbar-none">
           {[
             { id: 'all', label: '전체 AI 요약' },
             { id: 'high', label: '상 (공격형 AI)', indicator: highActive },
             { id: 'medium', label: '중 (중립형 AI)', indicator: mediumActive },
             { id: 'low', label: '하 (안정형 AI)', indicator: lowActive },
+            { id: 'mock', label: '한투 연동 모드' },
+            { id: 'local', label: '로컬 가상 모드' },
           ].map((tab) => (
             <button
               key={tab.id}
-              onClick={() => setActiveTab(tab.id as 'all' | 'high' | 'medium' | 'low')}
-              className={`px-6 py-3.5 text-sm font-bold transition-all relative border-b-2 -mb-[2px] cursor-pointer flex items-center gap-2 ${
+              onClick={() => setActiveTab(tab.id as 'all' | 'high' | 'medium' | 'low' | 'mock' | 'local')}
+              className={`px-6 py-3.5 text-sm font-bold transition-all relative border-b-2 -mb-[2px] cursor-pointer flex items-center gap-2 whitespace-nowrap ${
                 activeTab === tab.id
                   ? 'border-meta-blue text-meta-blue font-extrabold'
                   : 'border-transparent text-steel hover:text-ink'
@@ -429,6 +542,8 @@ export default function AdminAiMonitoringPage() {
             const aiProfitRate = (ai.portfolio?.initialBalance ?? 0) > 0
               ? (aiProfit / (ai.portfolio?.initialBalance ?? 0)) * 100
               : 0;
+            const actualHoldings = ai.holdings?.filter((h: any) => !h.isReservation) || [];
+            const reservationHoldings = ai.holdings?.filter((h: any) => h.isReservation) || [];
 
             return (
               <div key={ai.profile.id} className="space-y-6 bg-white border border-hairline-soft rounded-[32px] p-6 md:p-8 shadow-sm">
@@ -444,7 +559,7 @@ export default function AdminAiMonitoringPage() {
                        ai.profile.riskProfile === 'MEDIUM' ? '중' : '하'}
                     </div>
                     <div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <h2 className="text-xl font-extrabold text-ink">{ai.profile.name}</h2>
                         <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
                           ai.profile.riskProfile === 'HIGH' ? 'bg-market-up/10 text-market-up' :
@@ -453,6 +568,24 @@ export default function AdminAiMonitoringPage() {
                         }`}>
                           {ai.profile.riskProfile === 'HIGH' ? '고위험 공격형' :
                            ai.profile.riskProfile === 'MEDIUM' ? '중위험 중립형' : '원금보장 안정형'}
+                        </span>
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                          ai.profile.mockOrderEnabled ? 'bg-amber-500/10 text-amber-600 border border-amber-500/20' : 'bg-teal-500/10 text-teal-600 border border-teal-500/20'
+                        }`}>
+                          {ai.profile.mockOrderEnabled ? '한투 모의투자 연동' : '로컬 가상 매매'}
+                        </span>
+                        <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-indigo-50 border border-indigo-200 text-indigo-700">
+                          {(() => {
+                            const FREE_MODELS_LABELS = [
+                              "Google Gemma 2",
+                              "Meta Llama 3",
+                              "Alibaba Qwen 2.5",
+                              "Mistral 7B",
+                              "Microsoft Phi-3"
+                            ];
+                            const modelIndex = Math.abs(ai.profile.id) % 5;
+                            return FREE_MODELS_LABELS[modelIndex];
+                          })()}
                         </span>
                       </div>
                       <p className="text-xs text-steel mt-0.5">{ai.profile.email}</p>
@@ -582,52 +715,115 @@ export default function AdminAiMonitoringPage() {
                 {/* Dynamic Content Grid: Holdings vs Orders */}
                 <div className="grid lg:grid-cols-2 gap-8 mt-6">
                   {/* Holdings Section */}
-                  <div className="space-y-4">
-                    <h3 className="text-base font-extrabold text-ink flex items-center gap-2">
-                      <Briefcase className="w-4.5 h-4.5 text-meta-blue" />
-                      보유 주식 ({ai.holdings?.length ?? 0}종목)
-                    </h3>
-                    {ai.holdings && ai.holdings.length > 0 ? (
-                      <div className="border border-hairline-soft rounded-2xl overflow-hidden max-h-[300px] overflow-y-auto">
-                        <table className="w-full text-left border-collapse text-xs">
-                          <thead>
-                            <tr className="bg-surface-soft/60 border-b border-hairline-soft text-steel font-bold">
-                              <th className="px-4 py-2.5">종목명</th>
-                              <th className="px-4 py-2.5 text-right">수량</th>
-                              <th className="px-4 py-2.5 text-right">평균가</th>
-                              <th className="px-4 py-2.5 text-right">현재가</th>
-                              <th className="px-4 py-2.5 text-right">손익 (율)</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-hairline-soft">
-                            {ai.holdings.map((hold) => {
-                              const displayName = resolveStockName(hold.stockCode, hold.stockName);
-                              return (
-                                <tr key={hold.id} className="hover:bg-surface-soft/30 transition-colors">
-                                  <td className="px-4 py-3 font-semibold text-ink">
-                                    <Link href={getStockDetailUrl(hold.stockCode)} className="hover:text-meta-blue hover:underline transition-colors block">
-                                      <div>{displayName}</div>
-                                      <div className="text-[10px] text-steel font-normal">{hold.stockCode}</div>
-                                    </Link>
-                                  </td>
-                                  <td className="px-4 py-3 text-right text-charcoal">{hold.quantity}주</td>
-                                  <td className="px-4 py-3 text-right text-steel">{fmt(hold.avgPrice)}</td>
-                                  <td className="px-4 py-3 text-right text-charcoal font-semibold">{fmt(hold.currentPrice)}</td>
-                                  <td className={`px-4 py-3 text-right font-bold ${hold.profitLoss >= 0 ? 'text-market-up' : 'text-market-down'}`}>
-                                    <div>{hold.profitLoss >= 0 ? '+' : ''}{fmt(hold.profitLoss)}</div>
-                                    <div className="text-[10px] font-semibold">{hold.profitRate.toFixed(2)}%</div>
-                                  </td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
-                    ) : (
-                      <div className="border border-dashed border-hairline-soft rounded-2xl p-8 text-center text-steel text-sm bg-surface-soft/10">
-                        현재 보유 중인 종목이 없습니다.
-                      </div>
-                    )}
+                  <div className="space-y-6">
+                    {/* 보유 주식 */}
+                    <div className="space-y-3">
+                      <h3 className="text-base font-extrabold text-ink flex items-center gap-2">
+                        <Briefcase className="w-4.5 h-4.5 text-meta-blue" />
+                        보유 주식 ({actualHoldings.length}종목)
+                      </h3>
+                      {actualHoldings.length > 0 ? (
+                        <div className="border border-hairline-soft rounded-2xl overflow-hidden max-h-[220px] overflow-y-auto">
+                          <table className="w-full text-left border-collapse text-xs">
+                            <thead>
+                              <tr className="bg-surface-soft/60 border-b border-hairline-soft text-steel font-bold">
+                                <th className="px-4 py-2.5">종목명</th>
+                                <th className="px-4 py-2.5 text-right">수량</th>
+                                <th className="px-4 py-2.5 text-right">평균가</th>
+                                <th className="px-4 py-2.5 text-right">현재가</th>
+                                <th className="px-4 py-2.5 text-right">손익 (율)</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-hairline-soft">
+                              {actualHoldings.map((hold) => {
+                                const displayName = resolveStockName(hold.stockCode, hold.stockName);
+                                return (
+                                  <tr key={hold.id} className="hover:bg-surface-soft/30 transition-colors">
+                                    <td className="px-4 py-3 font-semibold text-ink">
+                                      <Link href={getStockDetailUrl(hold.stockCode)} className="hover:text-meta-blue hover:underline transition-colors block">
+                                        <div>{displayName}</div>
+                                        <div className="text-[10px] text-steel font-normal">{hold.stockCode}</div>
+                                      </Link>
+                                    </td>
+                                    <td className="px-4 py-3 text-right text-charcoal font-medium">
+                                      {hold.quantity}주
+                                    </td>
+                                    <td className="px-4 py-3 text-right text-steel">
+                                      {fmt(hold.avgPrice)}원
+                                    </td>
+                                    <td className="px-4 py-3 text-right text-charcoal font-semibold">{fmt(hold.currentPrice)}원</td>
+                                    <td className={`px-4 py-3 text-right font-bold ${hold.profitLoss >= 0 ? 'text-market-up' : 'text-market-down'}`}>
+                                      <div>{hold.profitLoss >= 0 ? '+' : ''}{fmt(hold.profitLoss)}원</div>
+                                      <div className="text-[10px] font-semibold">{hold.profitRate.toFixed(2)}%</div>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      ) : (
+                        <div className="border border-dashed border-hairline-soft rounded-2xl p-6 text-center text-steel text-xs bg-surface-soft/10">
+                          현재 보유 중인 종목이 없습니다.
+                        </div>
+                      )}
+                    </div>
+
+                    {/* 예약 매수 대기 */}
+                    <div className="space-y-3">
+                      <h3 className="text-base font-extrabold text-ink flex items-center gap-2">
+                        <History className="w-4.5 h-4.5 text-amber-500" />
+                        예약 매수 대기 ({reservationHoldings.length}종목)
+                      </h3>
+                      {reservationHoldings.length > 0 ? (
+                        <div className="border border-hairline-soft rounded-2xl overflow-hidden max-h-[220px] overflow-y-auto">
+                          <table className="w-full text-left border-collapse text-xs">
+                            <thead>
+                              <tr className="bg-surface-soft/60 border-b border-hairline-soft text-steel font-bold">
+                                <th className="px-4 py-2.5">종목명</th>
+                                <th className="px-4 py-2.5 text-right">구분</th>
+                                <th className="px-4 py-2.5 text-right">예약 목표가</th>
+                                <th className="px-4 py-2.5 text-right">현재가</th>
+                                <th className="px-4 py-2.5 text-right">상태</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-hairline-soft">
+                              {reservationHoldings.map((hold) => {
+                                const displayName = resolveStockName(hold.stockCode, hold.stockName).replace(/\s*\(예약\)$/, '');
+                                return (
+                                  <tr key={hold.id} className="hover:bg-surface-soft/30 transition-colors">
+                                    <td className="px-4 py-3 font-semibold text-ink">
+                                      <Link href={getStockDetailUrl(hold.stockCode)} className="hover:text-meta-blue hover:underline transition-colors block">
+                                        <div>{displayName}</div>
+                                        <div className="text-[10px] text-steel font-normal">{hold.stockCode}</div>
+                                      </Link>
+                                    </td>
+                                    <td className="px-4 py-3 text-right">
+                                      <span className="bg-amber-500/10 text-amber-600 text-[10px] font-bold px-1.5 py-0.5 rounded border border-amber-500/20 whitespace-nowrap">
+                                        예약매수
+                                      </span>
+                                    </td>
+                                    <td className="px-4 py-3 text-right text-charcoal font-semibold">
+                                      {fmt(hold.avgPrice)}원
+                                    </td>
+                                    <td className="px-4 py-3 text-right text-steel">{fmt(hold.currentPrice)}원</td>
+                                    <td className="px-4 py-3 text-right">
+                                      <span className="text-[10px] font-semibold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
+                                        장개시후 실행
+                                      </span>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      ) : (
+                        <div className="border border-dashed border-hairline-soft rounded-2xl p-6 text-center text-steel text-xs bg-surface-soft/10">
+                          예약 매수 대기 중인 종목이 없습니다.
+                        </div>
+                      )}
+                    </div>
                   </div>
 
                   {/* Order History Section */}

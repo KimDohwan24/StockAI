@@ -111,7 +111,10 @@ export default function AdminAiHistoryPage() {
       const raw = localStorage.getItem('ai_history_records');
       if (raw) {
         try {
-          setHistoryList(JSON.parse(raw));
+          const parsed = JSON.parse(raw);
+          Promise.resolve().then(() => {
+            setHistoryList(parsed);
+          });
         } catch (e) {
           console.error('Failed to parse ai_history_records', e);
         }

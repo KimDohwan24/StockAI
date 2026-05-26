@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import useSWR from 'swr';
 import { useAuth } from '@/lib/auth';
 import { wsManager } from '@/lib/websocket';
-import { getAdminAiStatus, AdminAiStatusResponse, resetAiAccounts, toggleUserMockOrder, toggleUserAiTrading, syncDomesticStocks, syncOverseasStocks, syncNaverNews, updateUserInitialBalance, getAdminSystemStatus } from '@/lib/api';
+import { getAdminAiStatus, AdminAiStatusResponse, HoldingResponse, resetAiAccounts, toggleUserMockOrder, toggleUserAiTrading, syncDomesticStocks, syncOverseasStocks, syncNaverNews, updateUserInitialBalance, getAdminSystemStatus } from '@/lib/api';
 import {
   Cpu,
   TrendingUp,
@@ -192,12 +192,12 @@ export default function AdminAiMonitoringPage() {
         id: Date.now(),
         savedAt: new Date().toISOString(),
         summary: {
-          totalAsset: aiStatusList.reduce((acc: number, curr: any) => acc + (curr.portfolio?.totalAssetValue ?? 0), 0),
-          totalInitial: aiStatusList.reduce((acc: number, curr: any) => acc + (curr.portfolio?.initialBalance ?? 0), 0),
-          activeCount: aiStatusList.filter((a: any) => a.profile.aiTradingEnabled).length,
-          totalOrders: aiStatusList.reduce((acc: number, curr: any) => acc + (curr.orderHistory?.length ?? 0), 0),
+          totalAsset: aiStatusList.reduce((acc: number, curr: AdminAiStatusResponse) => acc + (curr.portfolio?.totalAssetValue ?? 0), 0),
+          totalInitial: aiStatusList.reduce((acc: number, curr: AdminAiStatusResponse) => acc + (curr.portfolio?.initialBalance ?? 0), 0),
+          activeCount: aiStatusList.filter((a: AdminAiStatusResponse) => a.profile.aiTradingEnabled).length,
+          totalOrders: aiStatusList.reduce((acc: number, curr: AdminAiStatusResponse) => acc + (curr.orderHistory?.length ?? 0), 0),
         },
-        records: aiStatusList.map((ai: any) => {
+        records: aiStatusList.map((ai: AdminAiStatusResponse) => {
           const FREE_MODELS_LABELS = [
             "Google Gemma 2",
             "Meta Llama 3",
@@ -224,7 +224,7 @@ export default function AdminAiMonitoringPage() {
               cashBalance: ai.portfolio.cashBalance,
               totalAssetValue: ai.portfolio.totalAssetValue,
             } : null,
-            holdings: ai.holdings ? ai.holdings.map((h: any) => ({
+            holdings: ai.holdings ? ai.holdings.map((h: HoldingResponse) => ({
               stockCode: h.stockCode,
               stockName: h.stockName,
               quantity: h.quantity,
@@ -591,8 +591,8 @@ export default function AdminAiMonitoringPage() {
             const aiProfitRate = (ai.portfolio?.initialBalance ?? 0) > 0
               ? (aiProfit / (ai.portfolio?.initialBalance ?? 0)) * 100
               : 0;
-            const actualHoldings = ai.holdings?.filter((h: any) => !h.isReservation) || [];
-            const reservationHoldings = ai.holdings?.filter((h: any) => h.isReservation) || [];
+            const actualHoldings = ai.holdings?.filter((h: HoldingResponse) => !h.isReservation) || [];
+            const reservationHoldings = ai.holdings?.filter((h: HoldingResponse) => h.isReservation) || [];
 
             return (
               <div key={ai.profile.id} className="space-y-6 bg-white border border-hairline-soft rounded-[32px] p-6 md:p-8 shadow-sm">

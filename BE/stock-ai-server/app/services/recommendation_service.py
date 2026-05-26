@@ -135,17 +135,25 @@ class RecommendationService:
         change_rate = round(rng.uniform(-5.0, 5.0), 2)
         return price, change_rate
 
-    def _generate_reasoning(self, name: str, score: float, signal: str, avg_sentiment: float, change_rate: float, news_count: int) -> str:
+    def _generate_reasoning(self, name: str, score: float, signal: str, avg_sentiment: float, change_rate: float, news_count: int, is_fallback: bool = False) -> str:
         """
         뉴스 여론 및 시세 변동을 조합하여 AI 분석 리포트 코멘트를 한국어로 정교하게 자동 생성합니다.
         """
         sentiment_str = "긍정적" if avg_sentiment > 0.05 else ("부정적" if avg_sentiment < -0.05 else "중립적")
-        sentiment_desc = f"최근 수집된 {news_count}개의 관련 뉴스는 대체로 {sentiment_str}인 흐름(평균 감성 지수 {avg_sentiment:+.2f})을 보입니다."
-        if news_count == 0:
+        
+        if is_fallback:
+            sentiment_desc = "뉴스 API 호출 한도 초과 또는 네트워킹 문제로 뉴스 조회가 불가하여 기술적 가격 변동성 중심 분석으로 대체되었습니다."
+        elif news_count == 0:
             sentiment_desc = "최근 관련 뉴스가 충분히 보도되지 않아 시장 여론은 중립적인 상태입니다."
+        else:
+            sentiment_desc = f"최근 수집된 {news_count}개의 관련 뉴스는 대체로 {sentiment_str}인 흐름(평균 감성 지수 {avg_sentiment:+.2f})을 보입니다."
 
         price_trend = "상승세" if change_rate > 0 else ("하락세" if change_rate < 0 else "보합세")
-        price_desc = f"금일 주가는 전일 대비 {change_rate:+.2f}%의 {price_trend}를 나타내어 "
+        if is_fallback:
+            price_desc = f"현재 뉴스 데이터 연동 없이 금일 주가 변동률({change_rate:+.2f}%)만을 반영하여 분석을 수행 중이며, "
+        else:
+            price_desc = f"금일 주가는 전일 대비 {change_rate:+.2f}%의 {price_trend}를 나타내어 "
+
         if change_rate > 1.5:
             price_desc += "견고한 매수세가 지지되고 있습니다."
         elif change_rate < -1.5:
@@ -154,11 +162,20 @@ class RecommendationService:
             price_desc += "큰 가격 변동 없이 박스권 횡보를 보여주고 있습니다."
 
         if signal == "BUY":
-            summary = f"**[AI 신호: 매수(BUY)]** {name} 종목은 긍정적인 여론과 양호한 시장 흐름이 결합된 상태입니다. {sentiment_desc} {price_desc} 종합 점수 {score:+.1f}점으로 신규 매수 및 보유가 유리할 것으로 보입니다."
+            if is_fallback:
+                summary = f"**[AI 신호: 매수(BUY)]** {name} 종목은 {sentiment_desc} {price_desc} 주가 모멘텀 상승세가 뚜렷하여(AI 점수 {score:+.1f}점) 매수 예약 거래를 생성합니다."
+            else:
+                summary = f"**[AI 신호: 매수(BUY)]** {name} 종목은 긍정적인 여론과 양호한 시장 흐름이 결합된 상태입니다. {sentiment_desc} {price_desc} 종합 점수 {score:+.1f}점으로 신규 매수 및 보유가 유리할 것으로 보입니다."
         elif signal == "SELL":
-            summary = f"**[AI 신호: 매도(SELL)]** {name} 종목은 하방 압력이 누적되는 흐름을 보이고 있습니다. {sentiment_desc} {price_desc} 종합 점수 {score:+.1f}점으로 리스크 관리를 위한 매도 혹은 비중 축소를 추천합니다."
+            if is_fallback:
+                summary = f"**[AI 신호: 매도(SELL)]** {name} 종목은 {sentiment_desc} {price_desc} 주가 모멘텀 하방 압력이 감지되어(AI 점수 {score:+.1f}점) 선제적 리스크 관리를 추천합니다."
+            else:
+                summary = f"**[AI 신호: 매도(SELL)]** {name} 종목은 하방 압력이 누적되는 흐름을 보이고 있습니다. {sentiment_desc} {price_desc} 종합 점수 {score:+.1f}점으로 리스크 관리를 위한 매도 혹은 비중 축소를 추천합니다."
         else:
-            summary = f"**[AI 신호: 관망(HOLD)]** {name} 종목은 관망세가 우세한 구간입니다. {sentiment_desc} {price_desc} 종합 점수 {score:+.1f}점으로 뚜렷한 모멘텀이 나타날 때까지 포지션을 유지하며 추이를 지켜보는 것이 바람직합니다."
+            if is_fallback:
+                summary = f"**[AI 신호: 관망(HOLD)]** {name} 종목은 {sentiment_desc} {price_desc} 가격의 급격한 모멘텀이 나타나지 않아(AI 점수 {score:+.1f}점) 당일 포지션 유지를 추천합니다."
+            else:
+                summary = f"**[AI 신호: 관망(HOLD)]** {name} 종목은 관망세가 우세한 구간입니다. {sentiment_desc} {price_desc} 종합 점수 {score:+.1f}점으로 뚜렷한 모멘텀이 나타날 때까지 포지션을 유지하며 추이를 지켜보는 것이 바람직합니다."
 
         return summary
 
@@ -215,13 +232,21 @@ class RecommendationService:
         price, change_rate = await self._get_live_stock_info(ticker)
 
         # 5. AI 지수 계산
-        # 감성 가중치 70%, 시장 변동률 가중치 30%
-        # 변동률은 -10% ~ +10% 범위를 -100 ~ 100 점수로 환산
-        sentiment_part = avg_sentiment * 100 * 0.70
-        clamped_change = min(max(change_rate, -10.0), 10.0)
-        momentum_part = clamped_change * 10.0 * 0.30
+        # 뉴스가 성공적으로 수집된 경우: 감성 70%, 변동률 30%
+        # 뉴스 조회 실패 시 (Fallback): 변동률에 100% 가중치를 주어 주가 모멘텀 기반으로 평가
+        if news_list:
+            sentiment_part = avg_sentiment * 100 * 0.70
+            clamped_change = min(max(change_rate, -10.0), 10.0)
+            momentum_part = clamped_change * 10.0 * 0.30
+            final_score = sentiment_part + momentum_part
+            is_fallback = False
+        else:
+            # 변동률을 -10% ~ +10% 범위를 -100 ~ 100 점수로 하되, 0.5 가중치 부여 (최대 ±50점)
+            # 단독 가격 변동으로 BUY/SELL(±20점 기준)을 발생시키려면 변동률이 ±4.0% 이상이어야 함
+            clamped_change = min(max(change_rate, -10.0), 10.0)
+            final_score = clamped_change * 5.0
+            is_fallback = True
 
-        final_score = sentiment_part + momentum_part
         final_score = max(min(final_score, 100.0), -100.0)
         final_score = round(final_score, 1)
 
@@ -240,7 +265,8 @@ class RecommendationService:
             signal=signal,
             avg_sentiment=avg_sentiment,
             change_rate=change_rate,
-            news_count=len(news_list)
+            news_count=len(news_list),
+            is_fallback=is_fallback
         )
 
         return {

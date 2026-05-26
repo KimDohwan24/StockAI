@@ -21,6 +21,7 @@ public class StockMasterSyncService {
     private final StockMasterRepository stockMasterRepository;
     private final KisApiClient kisApiClient;
     private final StockSyncTransactionService stockSyncTransactionService;
+    private final com.stock.infrastructure.client.AiServerClient aiServerClient;
 
     private static final Map<String, String> SECTOR_CODE_MAP = Map.ofEntries(
             Map.entry("1", "건설"),
@@ -211,13 +212,41 @@ public class StockMasterSyncService {
         for (String marketDivCode : marketDivCodes) {
             try {
                 List<KisStockMasterItem> items = kisApiClient.getStockMasterList(marketDivCode);
-                if (!items.isEmpty()) {
+                if (items != null && !items.isEmpty()) {
                     totalSynced += stockSyncTransactionService.saveDomesticMarketItems(marketDivCode, items);
                 }
             } catch (Exception e) {
-                log.error("Failed to sync market {}: {}", marketDivCode, e.getMessage(), e);
+                log.error("Failed to sync market {} via KIS API: {}", marketDivCode, e.getMessage());
             }
         }
+
+        // KIS API가 실패했거나 결과가 없으면 AI Server (FinanceDataReader)를 통해 전체 상장 주식을 가져와 동기화
+        if (totalSynced == 0) {
+            log.info("KIS API catalog sync did not return any stocks. Attempting full KRX catalog sync via AI Server (FinanceDataReader)...");
+            try {
+                List<KisStockMasterItem> items = aiServerClient.getAiDomesticStockMaster();
+                if (items != null && !items.isEmpty()) {
+                    // KOSPI와 KOSDAQ 구분 저장
+                    List<KisStockMasterItem> kospiItems = items.stream()
+                            .filter(item -> "KOSPI".equals(item.getMarketType()))
+                            .toList();
+                    List<KisStockMasterItem> kosdaqItems = items.stream()
+                            .filter(item -> "KOSDAQ".equals(item.getMarketType()))
+                            .toList();
+                    
+                    if (!kospiItems.isEmpty()) {
+                        totalSynced += stockSyncTransactionService.saveDomesticMarketItems("1", kospiItems);
+                    }
+                    if (!kosdaqItems.isEmpty()) {
+                        totalSynced += stockSyncTransactionService.saveDomesticMarketItems("2", kosdaqItems);
+                    }
+                    log.info("Successfully synced {} domestic stocks from AI Server (FinanceDataReader)", totalSynced);
+                }
+            } catch (Exception e) {
+                log.error("Failed to sync full domestic stocks via AI Server: {}", e.getMessage(), e);
+            }
+        }
+
         if (totalSynced == 0) {
             totalSynced = seedFallbackDomesticStocks();
         }
@@ -234,11 +263,51 @@ public class StockMasterSyncService {
             createFallbackStock("035420", "NAVER", "IT", MarketType.KOSPI, "178000", "-1200", "5", "-0.67", "542981", "29104829"),
             createFallbackStock("035720", "카카오", "IT", MarketType.KOSPI, "45000", "200", "2", "0.45", "982103", "19830129"),
             createFallbackStock("005380", "현대차", "자동차", MarketType.KOSPI, "245000", "5000", "2", "2.08", "671029", "51839201"),
+            createFallbackStock("000270", "기아", "자동차", MarketType.KOSPI, "115000", "3000", "2", "2.68", "452901", "46102983"),
             createFallbackStock("207940", "삼성바이오로직스", "바이오", MarketType.KOSPI, "780000", "0", "3", "0.00", "43201", "55129830"),
+            createFallbackStock("068270", "셀트리온", "바이오", MarketType.KOSPI, "192000", "2500", "2", "1.32", "283019", "41983012"),
+            createFallbackStock("005490", "POSCO홀딩스", "철강소재", MarketType.KOSPI, "385000", "-1000", "5", "-0.26", "112903", "32981029"),
             createFallbackStock("051910", "LG화학", "에너지화학", MarketType.KOSPI, "395000", "-3500", "5", "-0.88", "182901", "27891029"),
             createFallbackStock("006400", "삼성SDI", "에너지화학", MarketType.KOSPI, "412000", "8000", "2", "1.98", "241902", "28301928"),
-            createFallbackStock("091990", "셀트리온헬스케어", "바이오", MarketType.KOSDAQ, "75000", "1200", "2", "1.63", "892102", "11298301"),
-            createFallbackStock("277810", "레인보우로보틱스", "중공업", MarketType.KOSDAQ, "168000", "-4200", "5", "-2.44", "410298", "3298102")
+            createFallbackStock("373220", "LG에너지솔루션", "에너지화학", MarketType.KOSPI, "365000", "-2000", "5", "-0.54", "98102", "85129830"),
+            createFallbackStock("105560", "KB금융", "금융", MarketType.KOSPI, "76000", "1200", "2", "1.60", "329810", "31298301"),
+            createFallbackStock("055550", "신한지주", "금융", MarketType.KOSPI, "48000", "500", "2", "1.05", "410298", "24893012"),
+            createFallbackStock("000810", "삼성화재", "금융", MarketType.KOSPI, "315000", "4500", "2", "1.45", "35102", "14893012"),
+            createFallbackStock("028260", "삼성물산", "산업재", MarketType.KOSPI, "152000", "1800", "2", "1.20", "89201", "28190239"),
+            createFallbackStock("012330", "현대모비스", "자동차", MarketType.KOSPI, "225000", "-1500", "5", "-0.66", "76102", "21049201"),
+            createFallbackStock("003550", "LG", "금융", MarketType.KOSPI, "78000", "200", "2", "0.26", "110298", "12102938"),
+            createFallbackStock("034730", "SK", "금융", MarketType.KOSPI, "165000", "-3000", "5", "-1.79", "129031", "11902830"),
+            createFallbackStock("015760", "한국전력", "전기가스", MarketType.KOSPI, "21000", "150", "2", "0.72", "891029", "13102938"),
+            createFallbackStock("000100", "유한양행", "바이오", MarketType.KOSPI, "74000", "1200", "2", "1.65", "189201", "5893012"),
+            createFallbackStock("009150", "삼성전기", "IT", MarketType.KOSPI, "148000", "2200", "2", "1.51", "141029", "11102938"),
+            createFallbackStock("010950", "S-Oil", "에너지화학", MarketType.KOSPI, "73500", "-500", "5", "-0.68", "98102", "8293012"),
+            createFallbackStock("032640", "LG유플러스", "미디어통신", MarketType.KOSPI, "9800", "40", "2", "0.41", "410298", "4293012"),
+            createFallbackStock("017670", "SK텔레콤", "미디어통신", MarketType.KOSPI, "51000", "300", "2", "0.59", "210492", "11102938"),
+            createFallbackStock("030200", "KT", "미디어통신", MarketType.KOSPI, "37500", "-200", "5", "-0.53", "190283", "9820129"),
+            createFallbackStock("086790", "하나금융지주", "금융", MarketType.KOSPI, "62000", "800", "2", "1.31", "298102", "18290312"),
+            createFallbackStock("247540", "에코프로비엠", "에너지화학", MarketType.KOSDAQ, "198000", "-2500", "5", "-1.25", "410298", "19290182"),
+            createFallbackStock("086520", "에코프로", "에너지화학", MarketType.KOSDAQ, "92000", "-1800", "5", "-1.92", "671029", "12192039"),
+            createFallbackStock("028300", "HLB", "바이오", MarketType.KOSDAQ, "85000", "2200", "2", "2.66", "1102983", "11102938"),
+            createFallbackStock("196170", "알테오젠", "바이오", MarketType.KOSDAQ, "178000", "4500", "2", "2.59", "541029", "9293012"),
+            createFallbackStock("035900", "JYP Ent.", "자유소비재", MarketType.KOSDAQ, "68000", "-1200", "5", "-1.73", "290182", "2410293"),
+            createFallbackStock("253450", "스튜디오드래곤", "미디어통신", MarketType.KOSDAQ, "45000", "300", "2", "0.67", "65102", "1351029"),
+            createFallbackStock("091990", "셀트리온제약", "바이오", MarketType.KOSDAQ, "92000", "1500", "2", "1.66", "141029", "3710293"),
+            createFallbackStock("277810", "레인보우로보틱스", "중공업", MarketType.KOSDAQ, "168000", "-4200", "5", "-2.44", "410298", "3298102"),
+            createFallbackStock("066970", "엘앤에프", "에너지화학", MarketType.KOSDAQ, "145000", "-3500", "5", "-2.36", "182901", "5293012"),
+            createFallbackStock("214150", "클래시스", "건강관리", MarketType.KOSDAQ, "37000", "450", "2", "1.23", "92102", "2410293"),
+            createFallbackStock("036570", "엔씨소프트", "정보통신", MarketType.KOSPI, "195000", "-2500", "5", "-1.27", "89201", "4293012"),
+            createFallbackStock("251270", "넷마블", "정보통신", MarketType.KOSPI, "58000", "600", "2", "1.05", "102931", "4983012"),
+            createFallbackStock("293490", "카카오게임즈", "정보통신", MarketType.KOSDAQ, "21000", "-300", "5", "-1.41", "151029", "1710293"),
+            createFallbackStock("263750", "펄어비스", "정보통신", MarketType.KOSDAQ, "38500", "400", "2", "1.05", "110293", "2510293"),
+            createFallbackStock("058470", "리노공업", "반도체", MarketType.KOSDAQ, "245000", "6000", "2", "2.51", "67102", "3710293"),
+            createFallbackStock("000720", "현대건설", "건설", MarketType.KOSPI, "31500", "-400", "5", "-1.25", "182901", "3510293"),
+            createFallbackStock("006360", "GS건설", "건설", MarketType.KOSPI, "15800", "200", "2", "1.28", "210492", "1351029"),
+            createFallbackStock("047820", "하이브", "자유소비재", MarketType.KOSPI, "215000", "4500", "2", "2.14", "190283", "8920129"),
+            createFallbackStock("008770", "호텔신라", "자유소비재", MarketType.KOSPI, "56000", "-800", "5", "-1.41", "76102", "2210293"),
+            createFallbackStock("139130", "DGB금융지주", "금융", MarketType.KOSPI, "8500", "120", "2", "1.43", "410298", "1410293"),
+            createFallbackStock("175330", "JB금융지주", "금융", MarketType.KOSPI, "12500", "250", "2", "2.04", "151029", "1982012"),
+            createFallbackStock("001450", "현대샘표", "필수소비재", MarketType.KOSPI, "51000", "-500", "5", "-0.97", "35102", "1210293"),
+            createFallbackStock("004370", "농심", "필수소비재", MarketType.KOSPI, "395000", "7000", "2", "1.80", "41029", "2410293")
         );
 
         int count = 0;

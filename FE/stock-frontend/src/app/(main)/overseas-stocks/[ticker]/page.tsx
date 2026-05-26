@@ -1,6 +1,6 @@
 'use client';
 
-import { useParams, useSearchParams } from 'next/navigation';
+import { useParams, useSearchParams, redirect } from 'next/navigation';
 import {
   TrendingUp,
   TrendingDown,
@@ -79,12 +79,13 @@ function buildPriceFromParams(
 }
 
 export default function OverseasStockDetailPage() {
+  redirect('/stocks');
   const params = useParams();
   const searchParams = useSearchParams();
   const ticker = (params.ticker as string) || '';
   const exchangeCode = (searchParams.get('exchange') as ExchangeCode) || 'NAS';
 
-  const priceInfo = buildPriceFromParams(ticker, exchangeCode, searchParams);
+  const priceInfo = buildPriceFromParams(ticker, exchangeCode, searchParams) as OverseasStockPrice;
 
   const isUp = priceInfo?.changeSign === '1' || priceInfo?.changeSign === '2';
   const isDown = priceInfo?.changeSign === '4' || priceInfo?.changeSign === '5';

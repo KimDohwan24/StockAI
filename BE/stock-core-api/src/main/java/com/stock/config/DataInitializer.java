@@ -1,7 +1,8 @@
 package com.stock.config;
-
 import com.stock.domain.entity.User;
 import com.stock.domain.repository.UserRepository;
+import com.stock.domain.stock.StockMasterRepository;
+import com.stock.service.StockMasterSyncService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.ApplicationArguments;
@@ -17,6 +18,10 @@ public class DataInitializer implements ApplicationRunner {
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
+    private final StockMasterRepository stockMasterRepository;
+    private final StockMasterSyncService stockMasterSyncService;
+    private final com.stock.domain.overseas.OverseasStockMasterRepository overseasStockMasterRepository;
+    private final com.stock.service.OverseasStockCatalogService overseasStockCatalogService;
 
     @Override
     @Transactional
@@ -32,6 +37,23 @@ public class DataInitializer implements ApplicationRunner {
         createAdminUserIfNotExist("admin@stockai.com", "stockai123!", "관리자");
 
         log.info("Test accounts initialization completed successfully");
+
+        // First-time startup check: dynamically load KIS stock masters if empty or fallback only
+        long stockCount = stockMasterRepository.count();
+        if (stockCount <= 10) {
+            log.info("Database contains {} stocks. Starting automatic KIS stock master catalog sync...", stockCount);
+            try {
+                int syncedCount = stockMasterSyncService.syncFromKis();
+                log.info("Successfully completed automatic KIS stock master catalog sync. Total synced: {}", syncedCount);
+            } catch (Exception e) {
+                log.error("Failed to run automatic KIS stock catalog sync on startup: {}", e.getMessage(), e);
+            }
+        } else {
+            log.info("Database already populated with {} stocks. Skipping automatic KIS sync.", stockCount);
+        }
+
+        // Overseas stocks startup check (Deactivated for now)
+        log.info("Automatic KIS overseas sync is currently deactivated.");
     }
 
     private void createTestUserIfNotExist(String email, String rawPassword, String name, User.RiskProfile riskProfile) {

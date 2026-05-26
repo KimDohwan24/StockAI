@@ -8,10 +8,12 @@ from app.services.sentiment_service import SentimentService
 from app.services.recommendation_service import RecommendationService
 from app.services.stock_mapper import StockMapper
 from app.services.news_service import NewsService
+from app.services.stock_master_service import StockMasterService
 
 redis_client: RedisClient = RedisClient(settings.REDIS_URL)
 _nlp_model: NLPModel | None = None
 _news_service: NewsService | None = None
+_stock_master_service: StockMasterService | None = None
 
 
 async def get_db() -> AsyncGenerator:
@@ -46,6 +48,13 @@ def get_news_service() -> NewsService:
     if _news_service is None:
         _news_service = NewsService()
     return _news_service
+
+
+def get_stock_master_service() -> StockMasterService:
+    global _stock_master_service
+    if _stock_master_service is None:
+        _stock_master_service = StockMasterService()
+    return _stock_master_service
 
 
 def get_recommendation_service() -> RecommendationService:

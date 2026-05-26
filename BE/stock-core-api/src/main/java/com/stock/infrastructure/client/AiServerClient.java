@@ -131,4 +131,38 @@ public class AiServerClient {
                                 }))
                 .bodyToMono(com.stock.infrastructure.dto.ai.DashboardRecommendationsResponse.class);
     }
+
+    public java.util.List<com.stock.infrastructure.dto.kis.KisStockMasterItem> getAiDomesticStockMaster() {
+        log.info("Requesting full domestic stock master from AI NLP server...");
+        return aiServerWebClient
+                .get()
+                .uri("/api/v1/ai/stocks/master/domestic")
+                .retrieve()
+                .onStatus(status -> status.isError(),
+                        clientResponse -> clientResponse.bodyToMono(String.class)
+                                .flatMap(body -> {
+                                    log.error("AI domestic stock master API error: {}", body);
+                                    return Mono.error(new RuntimeException("AI domestic stock master API error: " + body));
+                                }))
+                .bodyToFlux(com.stock.infrastructure.dto.kis.KisStockMasterItem.class)
+                .collectList()
+                .block();
+    }
+
+    public java.util.List<com.stock.infrastructure.dto.kis.KisOverseasStockMasterItem> getAiOverseasStockMaster() {
+        log.info("Requesting full US stock master from AI NLP server...");
+        return aiServerWebClient
+                .get()
+                .uri("/api/v1/ai/stocks/master/overseas")
+                .retrieve()
+                .onStatus(status -> status.isError(),
+                        clientResponse -> clientResponse.bodyToMono(String.class)
+                                .flatMap(body -> {
+                                    log.error("AI overseas stock master API error: {}", body);
+                                    return Mono.error(new RuntimeException("AI overseas stock master API error: " + body));
+                                }))
+                .bodyToFlux(com.stock.infrastructure.dto.kis.KisOverseasStockMasterItem.class)
+                .collectList()
+                .block();
+    }
 }

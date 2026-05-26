@@ -29,6 +29,7 @@ public class OverseasStockCatalogService {
     private final OverseasStockMasterRepository overseasStockMasterRepository;
     private final KisApiClient kisApiClient;
     private final StockSyncTransactionService stockSyncTransactionService;
+    private final com.stock.infrastructure.client.AiServerClient aiServerClient;
 
 
 
@@ -127,13 +128,37 @@ public class OverseasStockCatalogService {
         for (ExchangeCode exchangeCode : ExchangeCode.values()) {
             try {
                 List<KisOverseasStockMasterItem> items = kisApiClient.getOverseasStockMasterList(exchangeCode.name());
-                if (!items.isEmpty()) {
+                if (items != null && !items.isEmpty()) {
                     totalSynced += stockSyncTransactionService.saveOverseasExchangeItems(exchangeCode, items);
                 }
             } catch (Exception e) {
-                log.error("Failed to sync exchange {}: {}", exchangeCode, e.getMessage(), e);
+                log.error("Failed to sync exchange {} via KIS API: {}", exchangeCode, e.getMessage());
             }
         }
+
+        // KIS API가 실패했거나 결과가 없으면 AI Server (FinanceDataReader)를 통해 전체 해외 주식을 가져와 동기화
+        if (totalSynced == 0) {
+            log.info("KIS API overseas catalog sync did not return any stocks. Attempting full US catalog sync via AI Server (FinanceDataReader)...");
+            try {
+                List<KisOverseasStockMasterItem> items = aiServerClient.getAiOverseasStockMaster();
+                if (items != null && !items.isEmpty()) {
+                    // 거래소별(NAS, NYS) 구분 저장
+                    for (ExchangeCode exchangeCode : ExchangeCode.values()) {
+                        List<KisOverseasStockMasterItem> exchangeItems = items.stream()
+                                .filter(item -> exchangeCode.name().equals(item.getExchangeCode() != null ? item.getExchangeCode() : "NAS"))
+                                .toList();
+                        
+                        if (!exchangeItems.isEmpty()) {
+                            totalSynced += stockSyncTransactionService.saveOverseasExchangeItems(exchangeCode, exchangeItems);
+                        }
+                    }
+                    log.info("Successfully synced {} overseas stocks from AI Server (FinanceDataReader)", totalSynced);
+                }
+            } catch (Exception e) {
+                log.error("Failed to sync full overseas stocks via AI Server: {}", e.getMessage(), e);
+            }
+        }
+
         if (totalSynced == 0) {
             totalSynced = seedFallbackOverseasStocks();
         }

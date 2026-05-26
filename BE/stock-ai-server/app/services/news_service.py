@@ -63,7 +63,19 @@ class NewsService:
     async def search_news(self, keyword: str, limit: int = 10) -> list[dict]:
         """
         네이버 뉴스 API를 통해 키워드로 뉴스를 검색합니다.
+        결과는 Redis에 2시간(7200초) 동안 캐싱됩니다.
         """
+        # 순환 참조 방지를 위해 메소드 내부에서 lazy import
+        try:
+            from app.core.dependencies import redis_client
+            cache_key = f"news::search::{keyword}::{limit}"
+            cached_data = await redis_client.get(cache_key)
+            if cached_data is not None:
+                logger.info(f"News Cache HIT for keyword: '{keyword}', limit: {limit}")
+                return cached_data
+        except Exception as e:
+            logger.warning(f"Failed to read from Redis news cache: {str(e)}")
+
         if not self.client_id or not self.client_secret:
             logger.warning("NAVER_CLIENT_ID or NAVER_CLIENT_SECRET is missing. Returning empty news.")
             return []
@@ -99,6 +111,14 @@ class NewsService:
                         "pubDate": item.get("pubDate", ""),
                         "source": self._extract_source(link)
                     })
+
+                # 결과를 Redis에 2시간(7200초) 동안 캐시 저장
+                try:
+                    await redis_client.set(cache_key, news_list, ttl=7200)
+                    logger.info(f"News Cache SET for keyword: '{keyword}', limit: {limit}")
+                except Exception as cache_err:
+                    logger.warning(f"Failed to write to Redis news cache: {str(cache_err)}")
+                
                 return news_list
         except Exception as e:
             logger.error(f"Failed to search news: {str(e)}")

@@ -1,5 +1,6 @@
 import { Suspense } from 'react';
 import type { Metadata } from 'next';
+import { redirect } from 'next/navigation';
 import OverseasStockSearchBar from '@/components/overseas/OverseasStockSearchBar';
 import ExchangeFilterTabs from '@/components/overseas/ExchangeFilterTabs';
 import OverseasSectorFilter from '@/components/overseas/OverseasSectorFilter';
@@ -50,6 +51,7 @@ export default async function OverseasStocksPage({
 }: {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
+  redirect('/stocks');
   return (
     <div className="min-h-screen bg-canvas text-ink">
       <main className="max-w-7xl mx-auto px-6 py-8">

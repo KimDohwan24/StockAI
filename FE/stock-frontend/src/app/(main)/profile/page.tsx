@@ -365,6 +365,7 @@ export default function ProfilePage() {
                         <th className="text-left px-6 py-4 font-semibold">종목명</th>
                         <th className="text-right px-6 py-4 font-semibold">보유 수량</th>
                         <th className="text-right px-6 py-4 font-semibold">평균 단가</th>
+                        <th className="text-right px-6 py-4 font-semibold">총 구매금액</th>
                         <th className="text-right px-6 py-4 font-semibold">현재가</th>
                         <th className="text-right px-6 py-4 font-semibold">평가 손익</th>
                         <th className="text-right px-6 py-4 font-semibold">수익률</th>
@@ -383,6 +384,7 @@ export default function ProfilePage() {
                           </td>
                           <td className="text-right px-6 py-4 font-medium text-ink">{fmt(h.quantity)}</td>
                           <td className="text-right px-6 py-4 text-slate">{fmt(h.avgPrice)}원</td>
+                          <td className="text-right px-6 py-4 text-slate">{fmt(h.avgPrice * h.quantity)}원</td>
                           <td className="text-right px-6 py-4 text-slate">{fmt(h.currentPrice)}원</td>
                           <td className={`text-right px-6 py-4 font-medium ${h.profitLoss >= 0 ? 'text-market-up' : 'text-market-down'}`}>
                             {h.profitLoss >= 0 ? '+' : ''}{fmt(h.profitLoss)}원

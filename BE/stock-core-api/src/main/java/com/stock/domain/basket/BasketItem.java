@@ -34,6 +34,15 @@ public class BasketItem {
     @Column(name = "is_active", nullable = false)
     private boolean active = false;
 
+    @Column(name = "order_type", length = 10)
+    private String orderType = "BUY"; // BUY, SELL
+
+    @Column(name = "is_ai")
+    private Boolean aiReservation = false;
+
+    @Column(name = "quantity")
+    private Integer quantity = 0;
+
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt = LocalDateTime.now();
 
@@ -43,5 +52,16 @@ public class BasketItem {
         this.stockName = stockName;
         this.targetPrice = targetPrice;
         this.weight = weight;
+    }
+
+    public BasketItem(Long userId, String stockCode, String stockName, double targetPrice, int weight, String orderType, boolean aiReservation, Integer quantity) {
+        this.userId = userId;
+        this.stockCode = stockCode;
+        this.stockName = stockName;
+        this.targetPrice = targetPrice;
+        this.weight = weight;
+        this.orderType = orderType;
+        this.aiReservation = aiReservation;
+        this.quantity = quantity;
     }
 }

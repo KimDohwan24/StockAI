@@ -154,6 +154,7 @@ export interface HoldingResponse {
   profitLoss: number;
   profitRate: number;
   isReservation?: boolean;
+  orderType?: 'BUY' | 'SELL';
 }
 
 export interface TradeResponse {
@@ -467,6 +468,8 @@ export interface OrderHistoryResponse {
   amount: number;
   orderedBy: 'USER' | 'AI';
   reason?: string;
+  profitLoss?: number;
+  profitRate?: number;
   createdAt: string;
 }
 

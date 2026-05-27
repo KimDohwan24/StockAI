@@ -446,7 +446,7 @@ export default function ProfilePage() {
                             </Link>
                           </td>
                           <td className="text-center px-6 py-4">
-                            <span className={`inline-block px-2.5 py-1 rounded-full text-xs font-bold ${
+                            <span className={`inline-block px-2.5 py-1 rounded-full text-xs font-bold whitespace-nowrap ${
                               item.orderType === 'BUY' 
                                 ? 'bg-market-up/10 text-market-up' 
                                 : 'bg-market-down/10 text-market-down'
@@ -456,7 +456,16 @@ export default function ProfilePage() {
                           </td>
                           <td className="text-right px-6 py-4 font-medium text-ink">{fmt(item.quantity)}</td>
                           <td className="text-right px-6 py-4 text-slate">{fmt(item.price)}원</td>
-                          <td className="text-right px-6 py-4 font-medium text-ink">{fmt(item.amount)}원</td>
+                          <td className="text-right px-6 py-4 font-medium text-ink">
+                            <div>{fmt(item.amount)}원</div>
+                            {item.orderType === 'SELL' && (
+                              <div className={`text-[10px] font-bold leading-normal mt-0.5 ${
+                                (item.profitLoss ?? 0) >= 0 ? 'text-market-up' : 'text-market-down'
+                              }`}>
+                                {(item.profitLoss ?? 0) >= 0 ? '+' : ''}{fmt(item.profitLoss ?? 0)}원 ({(item.profitRate ?? 0).toFixed(2)}%)
+                              </div>
+                            )}
+                          </td>
                           <td className="text-center px-6 py-4">
                             {item.orderedBy === 'AI' ? (
                               <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-indigo-500/10 text-indigo-500 border border-indigo-500/20">

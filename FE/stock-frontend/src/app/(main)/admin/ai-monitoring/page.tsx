@@ -822,11 +822,11 @@ export default function AdminAiMonitoringPage() {
                       )}
                     </div>
 
-                    {/* 예약 매수 대기 */}
+                    {/* 예약 주문 대기 */}
                     <div className="space-y-3">
                       <h3 className="text-base font-extrabold text-ink flex items-center gap-2">
                         <History className="w-4.5 h-4.5 text-amber-500" />
-                        예약 매수 대기 ({reservationHoldings.length}종목)
+                        예약 주문 대기 ({reservationHoldings.length}종목)
                       </h3>
                       {reservationHoldings.length > 0 ? (
                         <div className="border border-hairline-soft rounded-2xl overflow-hidden max-h-[220px] overflow-y-auto">
@@ -834,7 +834,7 @@ export default function AdminAiMonitoringPage() {
                             <thead>
                               <tr className="bg-surface-soft/60 border-b border-hairline-soft text-steel font-bold">
                                 <th className="px-4 py-2.5">종목명</th>
-                                <th className="px-4 py-2.5 text-right">구분</th>
+                                <th className="px-4 py-2.5 text-right whitespace-nowrap">구분</th>
                                 <th className="px-4 py-2.5 text-right">예약 목표가</th>
                                 <th className="px-4 py-2.5 text-right">현재가</th>
                                 <th className="px-4 py-2.5 text-right">상태</th>
@@ -843,6 +843,7 @@ export default function AdminAiMonitoringPage() {
                             <tbody className="divide-y divide-hairline-soft">
                               {reservationHoldings.map((hold) => {
                                 const displayName = resolveStockName(hold.stockCode, hold.stockName).replace(/\s*\(예약\)$/, '');
+                                const isSell = hold.orderType === 'SELL';
                                 return (
                                   <tr key={hold.id} className="hover:bg-surface-soft/30 transition-colors">
                                     <td className="px-4 py-3 font-semibold text-ink">
@@ -851,18 +852,28 @@ export default function AdminAiMonitoringPage() {
                                         <div className="text-[10px] text-steel font-normal">{hold.stockCode}</div>
                                       </Link>
                                     </td>
-                                    <td className="px-4 py-3 text-right">
-                                      <span className="bg-amber-500/10 text-amber-600 text-[10px] font-bold px-1.5 py-0.5 rounded border border-amber-500/20 whitespace-nowrap">
-                                        예약매수
-                                      </span>
+                                    <td className="px-4 py-3 text-right whitespace-nowrap">
+                                      {isSell ? (
+                                        <span className="inline-block bg-rose-500/10 text-rose-600 text-[10px] font-bold px-2.5 py-1 rounded border border-rose-500/20 whitespace-nowrap">
+                                          예약매도
+                                        </span>
+                                      ) : (
+                                        <span className="inline-block bg-amber-500/10 text-amber-600 text-[10px] font-bold px-2.5 py-1 rounded border border-amber-500/20 whitespace-nowrap">
+                                          예약매수
+                                        </span>
+                                      )}
                                     </td>
                                     <td className="px-4 py-3 text-right text-charcoal font-semibold">
                                       {fmt(hold.avgPrice)}원
                                     </td>
                                     <td className="px-4 py-3 text-right text-steel">{fmt(hold.currentPrice)}원</td>
                                     <td className="px-4 py-3 text-right">
-                                      <span className="text-[10px] font-semibold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
-                                        장개시후 실행
+                                      <span className={`inline-block text-[10px] font-semibold px-2.5 py-1 rounded border ${
+                                        isSell
+                                          ? 'text-rose-600 bg-rose-50 border-rose-200'
+                                          : 'text-amber-600 bg-amber-50 border-amber-200'
+                                      }`}>
+                                        {hold.quantity > 0 ? `${hold.quantity}주 예약 실행` : '장개시후 실행'}
                                       </span>
                                     </td>
                                   </tr>
@@ -873,7 +884,7 @@ export default function AdminAiMonitoringPage() {
                         </div>
                       ) : (
                         <div className="border border-dashed border-hairline-soft rounded-2xl p-6 text-center text-steel text-xs bg-surface-soft/10">
-                          예약 매수 대기 중인 종목이 없습니다.
+                          예약 주문 대기 중인 종목이 없습니다.
                         </div>
                       )}
                     </div>
@@ -891,7 +902,7 @@ export default function AdminAiMonitoringPage() {
                           <thead>
                             <tr className="bg-surface-soft/60 border-b border-hairline-soft text-steel font-bold">
                               <th className="px-4 py-2.5">체결 시간</th>
-                              <th className="px-4 py-2.5">구분</th>
+                              <th className="px-4 py-2.5 whitespace-nowrap">구분</th>
                               <th className="px-4 py-2.5">종목명</th>
                               <th className="px-4 py-2.5 text-right">단가/수량</th>
                               <th className="px-4 py-2.5 text-right">체결 금액</th>
@@ -906,8 +917,8 @@ export default function AdminAiMonitoringPage() {
                                     <td className="px-4 py-3 text-steel whitespace-nowrap">
                                       {formatDateTime(order.createdAt)}
                                     </td>
-                                    <td className="px-4 py-3">
-                                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                    <td className="px-4 py-3 whitespace-nowrap">
+                                      <span className={`inline-block px-2.5 py-1 rounded-full text-[10px] font-bold whitespace-nowrap ${
                                         order.orderType === 'BUY'
                                           ? 'bg-market-up/10 text-market-up'
                                           : 'bg-market-down/10 text-market-down'
@@ -921,12 +932,27 @@ export default function AdminAiMonitoringPage() {
                                         <div className="text-[10px] text-steel font-normal">{order.ticker}</div>
                                       </Link>
                                     </td>
-                                    <td className="px-4 py-3 text-right">
+                                    <td className="px-4 py-3 text-right whitespace-nowrap">
                                       <div className="text-charcoal font-semibold">{fmt(order.price)}원</div>
                                       <div className="text-steel">{order.quantity}주</div>
+                                      {order.orderType === 'SELL' && (
+                                        <div className={`text-[10px] font-extrabold mt-1.5 leading-tight ${
+                                          (order.profitLoss ?? 0) >= 0 ? 'text-market-up' : 'text-market-down'
+                                        }`}>
+                                          <div className="whitespace-nowrap">손익: {(order.profitLoss ?? 0) >= 0 ? '+' : ''}{fmt(order.profitLoss ?? 0)}원</div>
+                                          <div className="text-[9px] font-bold">({(order.profitRate ?? 0).toFixed(2)}%)</div>
+                                        </div>
+                                      )}
                                     </td>
                                     <td className="px-4 py-3 text-right text-charcoal font-bold">
                                       <div>{fmt(order.amount)}원</div>
+                                      {order.orderType === 'SELL' && (
+                                        <div className={`text-[10px] font-bold leading-normal ${
+                                          (order.profitLoss ?? 0) >= 0 ? 'text-market-up' : 'text-market-down'
+                                        }`}>
+                                          {(order.profitLoss ?? 0) >= 0 ? '+' : ''}{fmt(order.profitLoss ?? 0)}원 ({(order.profitRate ?? 0).toFixed(2)}%)
+                                        </div>
+                                      )}
                                       {order.reason && (
                                         <button
                                           onClick={() => toggleReason(order.id)}

@@ -171,6 +171,11 @@ public class StockOrderService {
             stockName = resolveStockName(stockCode);
         }
 
+        // Calculate profit/loss based on holding's average buy price before deletion or update
+        double avgBuyPrice = holding.getAvgPrice();
+        double profitLoss = ((double) price - avgBuyPrice) * quantity;
+        double profitRate = avgBuyPrice > 0 ? (((double) price - avgBuyPrice) / avgBuyPrice) * 100 : 0.0;
+
         if (holding.getQuantity() == quantity) {
             portfolioRepository.delete(holding);
         } else {
@@ -179,7 +184,10 @@ public class StockOrderService {
         }
 
         // 4. Save order history
-        orderHistoryRepository.save(new OrderHistory(user.getId(), stockCode, stockName, "SELL", quantity, price, orderedBy, reason));
+        OrderHistory orderHistory = new OrderHistory(user.getId(), stockCode, stockName, "SELL", quantity, price, orderedBy, reason);
+        orderHistory.setProfitLoss(profitLoss);
+        orderHistory.setProfitRate(profitRate);
+        orderHistoryRepository.save(orderHistory);
 
         // 5. Save notification
         String sellMsg = String.format("%s (%s) %d주 매도 주문이 체결되었습니다. (단가: %,d원, 주문주체: %s)",

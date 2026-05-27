@@ -43,6 +43,12 @@ public class OrderHistory {
     @Column(name = "reason", length = 1000)
     private String reason;
 
+    @Column(name = "profit_loss")
+    private Double profitLoss;
+
+    @Column(name = "profit_rate")
+    private Double profitRate;
+
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt = LocalDateTime.now();
 

@@ -288,11 +288,20 @@ public class AiTradingScheduler {
                                     if (!basketRepository.existsByUserIdAndStockCode(user.getId(), stockCode)) {
                                         String stockName = stockNameMap.get(stockCode);
                                         if (stockName == null) stockName = stockCode;
-                                        BasketItem reservation = new BasketItem(user.getId(), stockCode, stockName, price, 10);
+                                        BasketItem reservation = new BasketItem(
+                                                user.getId(),
+                                                stockCode,
+                                                stockName,
+                                                price,
+                                                10,
+                                                "BUY",
+                                                true,
+                                                buyQty
+                                        );
                                         reservation.setActive(true);
                                         basketRepository.save(reservation);
-                                        log.info("AI Auto-Reservation (Outside Market Hours): User={}, Stock={}, TargetPrice={} using model={}", 
-                                                user.getEmail(), stockCode, price, assignedModel);
+                                        log.info("AI Auto-Reservation BUY (Outside Market Hours): User={}, Stock={}, Qty={}, TargetPrice={} using model={}", 
+                                                user.getEmail(), stockCode, buyQty, price, assignedModel);
                                     }
                                 } else {
                                     log.info("AI Auto-Buy: User={}, Stock={}, Qty={}, Price={}, TotalCost={} using model={}", 
@@ -304,8 +313,25 @@ public class AiTradingScheduler {
                         } else if ("SELL".equals(signal)) {
                             if (holding != null && holding.getQuantity() > 0) {
                                 if (user.isMockOrderEnabled() && !isMarketHours()) {
-                                    log.info("AI Auto-Sell Signal received outside market hours (Skipping order): User={}, Stock={}, Qty={}, Price={} using model={}", 
-                                            user.getEmail(), stockCode, holding.getQuantity(), price, assignedModel);
+                                    // 장외 시간대이므로 예약 매도로 등록
+                                    if (!basketRepository.existsByUserIdAndStockCode(user.getId(), stockCode)) {
+                                        String stockName = stockNameMap.get(stockCode);
+                                        if (stockName == null) stockName = stockCode;
+                                        BasketItem reservation = new BasketItem(
+                                                user.getId(),
+                                                stockCode,
+                                                stockName,
+                                                price,
+                                                10,
+                                                "SELL",
+                                                true,
+                                                holding.getQuantity()
+                                        );
+                                        reservation.setActive(true);
+                                        basketRepository.save(reservation);
+                                        log.info("AI Auto-Reservation SELL (Outside Market Hours): User={}, Stock={}, Qty={}, TargetPrice={} using model={}", 
+                                                user.getEmail(), stockCode, holding.getQuantity(), price, assignedModel);
+                                    }
                                 } else {
                                     log.info("AI Auto-Sell (Signal): User={}, Stock={}, Qty={}, Price={} using model={}", 
                                             user.getEmail(), stockCode, holding.getQuantity(), price, assignedModel);

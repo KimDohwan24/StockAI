@@ -306,7 +306,7 @@ export default function AiHistoryPage() {
                           ⚠️ 자동 손절
                         </span>
                       )}
-                      <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold ${
+                      <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold whitespace-nowrap ${
                         isBuy
                           ? 'bg-market-up/10 text-market-up'
                           : 'bg-market-down/10 text-market-down'
@@ -339,6 +339,13 @@ export default function AiHistoryPage() {
                     <div>
                       <p className="text-[10px] text-steel">총 거래 금액</p>
                       <p className="text-sm font-bold text-ink mt-0.5">{fmt(item.amount)}원</p>
+                      {item.orderType === 'SELL' && (
+                        <p className={`text-[10px] font-bold mt-0.5 ${
+                          (item.profitLoss ?? 0) >= 0 ? 'text-market-up' : 'text-market-down'
+                        }`}>
+                          {(item.profitLoss ?? 0) >= 0 ? '+' : ''}{fmt(item.profitLoss ?? 0)}원 ({(item.profitRate ?? 0).toFixed(2)}%)
+                        </p>
+                      )}
                     </div>
                   </div>
 

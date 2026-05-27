@@ -121,12 +121,13 @@ public class PortfolioService {
                         item.getId(),
                         item.getStockCode(),
                         item.getStockName() + " (예약)",
-                        0,
+                        item.getQuantity() != null ? item.getQuantity() : 0,
                         item.getTargetPrice(),
                         currentPrice,
                         0.0,
                         0.0,
-                        true
+                        true,
+                        item.getOrderType() != null ? item.getOrderType() : "BUY"
                 ));
             }
         } catch (Exception e) {

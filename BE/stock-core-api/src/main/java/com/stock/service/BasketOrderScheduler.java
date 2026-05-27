@@ -49,18 +49,50 @@ public class BasketOrderScheduler {
                 }
 
                 StockPriceResponse priceResp = stockPriceService.getCurrentPrice(item.getStockCode());
-                if (priceResp == null) continue;
+                if (priceResp == null || priceResp.getStck_prpr() == null) continue;
 
-                double currentPrice = Double.parseDouble(priceResp.getStck_prpr());
+                double currentPrice = Double.parseDouble(priceResp.getStck_prpr().trim());
                 if (currentPrice <= 0) continue;
 
-                // 목표가 이하로 떨어지면 자동 예약 매수 발동
-                if (currentPrice <= item.getTargetPrice()) {
-                    executeOrder(user, item, (int)currentPrice);
+                if (item.getAiReservation() != null && item.getAiReservation()) {
+                    executeAiReservation(user, item, (int) currentPrice);
+                } else {
+                    // 목표가 이하로 떨어지면 자동 예약 매수 발동 (사용자 수동 장바구니)
+                    if (currentPrice <= item.getTargetPrice()) {
+                        executeOrder(user, item, (int) currentPrice);
+                    }
                 }
             } catch (Exception e) {
-                log.error("장바구니 예약 매수 처리 오류 (항목 ID: " + item.getId() + ")", e);
+                log.error("예약 주문 처리 오류 (항목 ID: " + item.getId() + ")", e);
             }
+        }
+    }
+
+    private void executeAiReservation(User user, BasketItem item, int currentPrice) {
+        int qty = item.getQuantity() != null ? item.getQuantity() : 0;
+        if (qty <= 0) qty = 1;
+
+        try {
+            if ("SELL".equalsIgnoreCase(item.getOrderType())) {
+                log.info("Executing AI Auto-Reservation SELL: User={}, Stock={}, Qty={}, Price={}", 
+                        user.getEmail(), item.getStockCode(), qty, currentPrice);
+                stockOrderService.sell(user.getEmail(), item.getStockCode(), qty, currentPrice, "AI", "AI 예약 자동 매도 체결");
+            } else {
+                log.info("Executing AI Auto-Reservation BUY: User={}, Stock={}, Qty={}, Price={}", 
+                        user.getEmail(), item.getStockCode(), qty, currentPrice);
+                stockOrderService.buy(user.getEmail(), item.getStockCode(), qty, currentPrice, "AI", "AI 예약 자동 매수 체결");
+            }
+            item.setActive(false);
+            basketRepository.save(item);
+        } catch (Exception e) {
+            item.setActive(false);
+            basketRepository.save(item);
+
+            String errorMsg = String.format("❌ AI %s 예약 자동 주문 (%s, %s) 진행 중 실패: %s",
+                    "SELL".equalsIgnoreCase(item.getOrderType()) ? "매도" : "매수",
+                    item.getStockName(), item.getStockCode(), e.getMessage());
+            notificationRepository.save(new Notification(user.getId(), errorMsg));
+            log.error("AI 예약 주문 처리 실패 (항목 ID: " + item.getId() + ")", e);
         }
     }
 

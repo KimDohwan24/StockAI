@@ -9,7 +9,13 @@ const RECONNECT_DELAY_MS = 3000;
 
 class WebSocketManager {
   private client: Client | null = null;
-  private clientId: string = crypto.randomUUID();
+  private clientId: string = (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function')
+    ? crypto.randomUUID()
+    : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+        const r = (Math.random() * 16) | 0;
+        const v = c === 'x' ? r : (r & 0x3) | 0x8;
+        return v.toString(16);
+      });
   private connectionState: WebSocketConnectionState = 'disconnected';
   private subscriptionIdCounter = 0;
   private reconnectAttempts = 0;

@@ -50,9 +50,15 @@ public class WebClientConfig {
                 .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 10000)
                 .responseTimeout(Duration.ofSeconds(10));
 
-        String mockBaseUrl = kisConfig.getMock() != null ? kisConfig.getMock().getBaseUrl() : kisConfig.getBaseUrl();
-        String mockAppkey = kisConfig.getMock() != null ? kisConfig.getMock().getAppkey() : kisConfig.getAppkey();
-        String mockAppsecret = kisConfig.getMock() != null ? kisConfig.getMock().getAppsecret() : kisConfig.getAppsecret();
+        String mockBaseUrl = (kisConfig.getMock() != null && kisConfig.getMock().getBaseUrl() != null && !kisConfig.getMock().getBaseUrl().trim().isEmpty())
+                ? kisConfig.getMock().getBaseUrl()
+                : kisConfig.getBaseUrl();
+        String mockAppkey = (kisConfig.getMock() != null && kisConfig.getMock().getAppkey() != null && !kisConfig.getMock().getAppkey().trim().isEmpty())
+                ? kisConfig.getMock().getAppkey()
+                : kisConfig.getAppkey();
+        String mockAppsecret = (kisConfig.getMock() != null && kisConfig.getMock().getAppsecret() != null && !kisConfig.getMock().getAppsecret().trim().isEmpty())
+                ? kisConfig.getMock().getAppsecret()
+                : kisConfig.getAppsecret();
 
         return WebClient.builder()
                 .baseUrl(mockBaseUrl)
@@ -83,7 +89,9 @@ public class WebClientConfig {
                 .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 5000)
                 .responseTimeout(Duration.ofSeconds(5));
 
-        String mockOauthUrl = kisConfig.getMock() != null ? kisConfig.getMock().getOauthUrl() : kisConfig.getOauthUrl();
+        String mockOauthUrl = (kisConfig.getMock() != null && kisConfig.getMock().getOauthUrl() != null && !kisConfig.getMock().getOauthUrl().trim().isEmpty())
+                ? kisConfig.getMock().getOauthUrl()
+                : kisConfig.getOauthUrl();
 
         return WebClient.builder()
                 .baseUrl(mockOauthUrl)

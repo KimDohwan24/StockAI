@@ -151,6 +151,23 @@ services:
     networks:
       - stock-network
 
+  # =========================================================================
+  # 6. Ngrok Tunnel Service (External Remote Access)
+  # =========================================================================
+  ngrok:
+    image: ngrok/ngrok:latest
+    restart: always
+    environment:
+      NGROK_AUTHTOKEN: "${NGROK_AUTHTOKEN}"
+    command:
+      - "http"
+      - "stock-frontend:3000"
+      - "--domain=majestic-latrine-aspirin.ngrok-free.dev"
+    depends_on:
+      - stock-frontend
+    networks:
+      - stock-network
+
 # -------------------------------------------------------------------------
 # Network & Volume Definitions
 # -------------------------------------------------------------------------
@@ -161,3 +178,4 @@ networks:
 volumes:
   pgdata:
     driver: local
+

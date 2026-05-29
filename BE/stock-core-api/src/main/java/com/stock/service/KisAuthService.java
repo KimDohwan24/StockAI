@@ -145,8 +145,12 @@ public class KisAuthService {
 
     private String doIssueMockAccessToken() {
         log.info("Issuing new KIS Mock access token...");
-        String mockAppkey = kisConfig.getMock() != null ? kisConfig.getMock().getAppkey() : kisConfig.getAppkey();
-        String mockAppsecret = kisConfig.getMock() != null ? kisConfig.getMock().getAppsecret() : kisConfig.getAppsecret();
+        String mockAppkey = (kisConfig.getMock() != null && kisConfig.getMock().getAppkey() != null && !kisConfig.getMock().getAppkey().trim().isEmpty())
+                ? kisConfig.getMock().getAppkey()
+                : kisConfig.getAppkey();
+        String mockAppsecret = (kisConfig.getMock() != null && kisConfig.getMock().getAppsecret() != null && !kisConfig.getMock().getAppsecret().trim().isEmpty())
+                ? kisConfig.getMock().getAppsecret()
+                : kisConfig.getAppsecret();
 
         if (mockAppkey == null || mockAppsecret == null || mockAppkey.trim().isEmpty() || mockAppkey.startsWith("YOUR_")) {
             log.warn("Mock KIS credentials are not configured, falling back to real KIS credentials");

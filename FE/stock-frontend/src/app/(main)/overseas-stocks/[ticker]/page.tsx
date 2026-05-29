@@ -1,22 +1,21 @@
 'use client';
 
-import { useParams, useSearchParams, redirect } from 'next/navigation';
-import {
-  TrendingUp,
-  TrendingDown,
-  Minus,
-  Activity,
-  BarChart3,
-  Landmark,
-  Hash,
-  ArrowUpRight,
-  ArrowDownRight,
-  DollarSign,
-  Percent,
-} from 'lucide-react';
-import type { ExchangeCode, CountryCode, OverseasStockPrice } from '@/types/overseasStock';
-import { COUNTRY_FLAGS } from '@/constants/countryFlags';
 import OverseasOrderPanel from '@/components/overseas/OverseasOrderPanel';
+import type { ExchangeCode, OverseasStockPrice } from '@/types/overseasStock';
+import {
+  Activity,
+  ArrowDownRight,
+  ArrowUpRight,
+  BarChart3,
+  DollarSign,
+  Hash,
+  Landmark,
+  Minus,
+  Percent,
+  TrendingDown,
+  TrendingUp,
+} from 'lucide-react';
+import { redirect, useParams, useSearchParams } from 'next/navigation';
 
 function fmt(n: number, currency: string): string {
   if (currency === 'KRW') return Math.round(n).toLocaleString('ko-KR');
@@ -95,12 +94,6 @@ export default function OverseasStockDetailPage() {
     NAS: 'USD', NYS: 'USD', AMS: 'USD',
   };
   const currency = currencyMap[exchangeCode] ?? 'USD';
-
-  const countryMap: Record<string, CountryCode> = {
-    NAS: 'US', NYS: 'US', AMS: 'US',
-  };
-  const country = countryMap[exchangeCode] ?? 'US';
-  const flag = COUNTRY_FLAGS[country] ?? '';
 
   return (
     <div className="min-h-screen bg-canvas text-ink">

@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useState, useCallback, useEffect, ReactNode } from 'react';
+import { createContext, ReactNode, useCallback, useContext, useEffect, useState } from 'react';
 
 // TODO: XSS 방지를 위해 HttpOnly 쿠키 기반 JWT 저장 고려 (현재 localStorage)
 const TOKEN_KEY = 'stockai_token';

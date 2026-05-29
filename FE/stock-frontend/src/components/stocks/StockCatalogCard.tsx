@@ -1,14 +1,14 @@
-import { useState } from 'react';
+import { useInView } from '@/hooks/useInView';
+import type { MappedStockPrice } from '@/lib/api';
+import { addBasketItem, deleteBasketItem, getBasketItems, getFavoriteStatus, toggleFavorite } from '@/lib/api';
+import { useAuth } from '@/lib/auth';
+import type { StockCatalogItem, StockCatalogWithPrice } from '@/types/stock';
+import { ShoppingCart, Star } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { useState } from 'react';
 import useSWR, { mutate } from 'swr';
-import { Star, ShoppingCart } from 'lucide-react';
-import { useAuth } from '@/lib/auth';
-import { toggleFavorite, getFavoriteStatus, addBasketItem, deleteBasketItem, getBasketItems } from '@/lib/api';
 import StockPriceBadge from './StockPriceBadge';
-import { useInView } from '@/hooks/useInView';
-import type { StockCatalogItem, StockCatalogWithPrice } from '@/types/stock';
-import type { MappedStockPrice } from '@/lib/api';
 
 interface StockCatalogCardProps {
   item: StockCatalogItem;

@@ -1,6 +1,6 @@
+import type { WebSocketConnectionState } from '@/types/websocket';
 import { Client, IMessage } from '@stomp/stompjs';
 import SockJS from 'sockjs-client';
-import type { WebSocketConnectionState } from '@/types/websocket';
 
 type MessageHandler = (message: IMessage) => void;
 

@@ -1,32 +1,29 @@
 'use client';
 
-import { useEffect, useState, Fragment } from 'react';
-import { useRouter } from 'next/navigation';
-import useSWR from 'swr';
+import { AdminAiStatusResponse, getAdminAiStatus, getAdminSystemStatus, HoldingResponse, resetAiAccounts, syncDomesticStocks, syncNaverNews, syncOverseasStocks, toggleUserAiTrading, toggleUserMockOrder, updateUserInitialBalance } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
+import { resolveStockName } from '@/lib/stockMap';
 import { wsManager } from '@/lib/websocket';
-import { getAdminAiStatus, AdminAiStatusResponse, HoldingResponse, resetAiAccounts, toggleUserMockOrder, toggleUserAiTrading, syncDomesticStocks, syncOverseasStocks, syncNaverNews, updateUserInitialBalance, getAdminSystemStatus } from '@/lib/api';
 import {
-  Cpu,
-  TrendingUp,
-  TrendingDown,
   Activity,
   Briefcase,
-  Layers,
-  History,
-  DollarSign,
-  Info,
-  RefreshCw,
-  UserCheck,
   CheckCircle2,
-  XCircle,
-  RotateCcw,
+  Cpu,
   Globe,
-  Shield,
+  History,
+  Info,
   Newspaper,
+  RefreshCw,
+  RotateCcw,
+  Shield,
+  TrendingDown,
+  TrendingUp,
+  XCircle
 } from 'lucide-react';
 import Link from 'next/link';
-import { resolveStockName } from '@/lib/stockMap';
+import { useRouter } from 'next/navigation';
+import { Fragment, useEffect, useState } from 'react';
+import useSWR from 'swr';
 
 function fmt(n: number): string {
   if (n === null || n === undefined || isNaN(n)) return '0';

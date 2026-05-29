@@ -1,13 +1,13 @@
 'use client';
 
-import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
-import useSWR from 'swr';
-import { getStocks, extractInitialPricesFromCatalog, getBatchStockPrices } from '@/services/stockCatalogApi';
-import { useStockPriceStreamBatch } from '@/hooks/useStockPriceStream';
-import StockCatalogCard from '@/components/stocks/StockCatalogCard';
 import LoadMore from '@/components/stocks/LoadMore';
-import type { StockCatalogWithPrice, StockCatalogWithPriceResponse } from '@/types/stock';
+import StockCatalogCard from '@/components/stocks/StockCatalogCard';
+import { useStockPriceStreamBatch } from '@/hooks/useStockPriceStream';
 import type { MappedStockPrice } from '@/lib/api';
+import { extractInitialPricesFromCatalog, getBatchStockPrices, getStocks } from '@/services/stockCatalogApi';
+import type { StockCatalogWithPrice, StockCatalogWithPriceResponse } from '@/types/stock';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import useSWR from 'swr';
 
 interface StockCatalogInfiniteProps {
   initialData: StockCatalogWithPriceResponse;

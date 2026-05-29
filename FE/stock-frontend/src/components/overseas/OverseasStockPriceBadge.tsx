@@ -1,7 +1,7 @@
 'use client';
 
-import { TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import type { OverseasStockPrice } from '@/types/overseasStock';
+import { Minus, TrendingDown, TrendingUp } from 'lucide-react';
 
 interface OverseasStockPriceBadgeProps {
   ticker: string;

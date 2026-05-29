@@ -1,12 +1,12 @@
-import { Suspense } from 'react';
-import type { Metadata } from 'next';
-import StockSearchBar from '@/components/stocks/StockSearchBar';
 import MarketTypeTabs from '@/components/stocks/MarketTypeTabs';
 import SectorFilter from '@/components/stocks/SectorFilter';
+import StockSearchBar from '@/components/stocks/StockSearchBar';
+import type { Metadata } from 'next';
+import { Suspense } from 'react';
 
 import SortSelect from '@/components/stocks/SortSelect';
 import StockCatalogInfinite from '@/components/stocks/StockCatalogInfinite';
-import { getStocks, extractInitialPricesFromCatalog } from '@/services/stockCatalogApi';
+import { extractInitialPricesFromCatalog, getStocks } from '@/services/stockCatalogApi';
 
 export const metadata: Metadata = {
   title: '전체 종목 | StockAI',

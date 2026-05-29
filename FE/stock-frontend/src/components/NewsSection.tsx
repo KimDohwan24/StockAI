@@ -1,7 +1,7 @@
 'use client';
 
 import { StockNewsItem } from '@/lib/api';
-import { ExternalLink, TrendingUp, TrendingDown, Minus } from 'lucide-react';
+import { ExternalLink, Minus, TrendingDown, TrendingUp } from 'lucide-react';
 
 interface NewsSectionProps {
   news: StockNewsItem[];
@@ -29,7 +29,6 @@ export default function NewsSection({ news, isLoading }: NewsSectionProps) {
 
   const getSentimentBadge = (sentiment: StockNewsItem['sentiment'], score: number, confidence: number) => {
     const confPct = Math.round(confidence * 100);
-    const scoreVal = score.toFixed(2);
     
     switch (sentiment) {
       case 'positive':

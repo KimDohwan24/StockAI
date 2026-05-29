@@ -1,17 +1,17 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
 import {
-  createChart,
+  AreaSeries,
+  CandlestickData,
+  CandlestickSeries,
   ColorType,
+  createChart,
   IChartApi,
   ISeriesApi,
-  AreaSeries,
-  CandlestickSeries,
-  Time,
-  CandlestickData,
   SingleValueData,
+  Time,
 } from 'lightweight-charts';
+import { useEffect, useRef, useState } from 'react';
 
 type SeriesType = ISeriesApi<'Candlestick'> | ISeriesApi<'Area'>;
 
@@ -231,7 +231,7 @@ export default function StockChart({
       lastCandleRef.current = null;
       setIsReady(false);
     };
-  }, [data, color, type, height]);
+  }, [data, color, type, height, pureLine, sparkline]);
 
   useEffect(() => {
     if (realtimePrice == null || !seriesRef.current || !lastCandleRef.current) return;

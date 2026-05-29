@@ -1,7 +1,7 @@
 'use client';
 
-import { TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import type { MappedStockPrice } from '@/lib/api';
+import { Minus, TrendingDown, TrendingUp } from 'lucide-react';
 
 function fmt(n: number): string {
   if (n === null || n === undefined || isNaN(n)) return '0';

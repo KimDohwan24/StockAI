@@ -1,11 +1,11 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
-import { Search } from 'lucide-react';
-import useSWR from 'swr';
 import { searchOverseasStocks } from '@/services/overseasStockApi';
 import type { OverseasStockCatalogItem } from '@/types/overseasStock';
+import { Search } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import useSWR from 'swr';
 
 export default function OverseasStockSearchBar({ inline }: { inline?: boolean } = {}) {
   const [query, setQuery] = useState('');

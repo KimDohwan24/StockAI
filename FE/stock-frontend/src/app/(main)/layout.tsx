@@ -1,8 +1,8 @@
 'use client';
 
-import { SWRConfig } from 'swr';
 import Navbar from '@/components/Navbar';
 import { WebSocketProvider } from '@/provider/WebSocketProvider';
+import { SWRConfig } from 'swr';
 
 export default function MainLayout({
   children,

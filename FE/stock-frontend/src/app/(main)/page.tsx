@@ -1,43 +1,38 @@
 'use client';
 
-import { useMemo, useState } from 'react';
-import Link from 'next/link';
-import useSWR, { mutate } from 'swr';
-import {
-  TrendingUp,
-  TrendingDown,
-  Minus,
-  ArrowUpRight,
-  Star,
-  Eye,
-  Globe,
-  Sparkles,
-} from 'lucide-react';
+import OverseasStockCard from '@/components/overseas/OverseasStockCard';
 import StockChart, { AreaPoint } from '@/components/StockChart';
-import { Time } from 'lightweight-charts';
+import { useStockPriceStreamBatch } from '@/hooks/useStockPriceStream';
+import { useVisibility } from '@/hooks/useVisibility';
 import {
-  getMinuteCandles,
-  getPortfolio,
-  getHoldings,
-  MappedStockPrice,
-  MappedMinuteCandle,
-  PortfolioResponse,
-  HoldingResponse,
-  getDashboardRecommendations,
   DashboardRecommendationItem,
   DashboardRecommendations,
-  toggleFavorite,
+  getDashboardRecommendations,
   getFavoriteStatus,
+  getMinuteCandles,
+  MappedMinuteCandle,
+  MappedStockPrice,
+  toggleFavorite
 } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
-import { useVisibility } from '@/hooks/useVisibility';
-import { useStockPriceStreamBatch } from '@/hooks/useStockPriceStream';
-import OverseasBalanceTable from '@/components/overseas/OverseasBalanceTable';
-import { getTrendingOverseasStocks, type OverseasTrendingResponse } from '@/services/overseasStockApi';
-import OverseasStockCard from '@/components/overseas/OverseasStockCard';
-import type { OverseasStockCatalogItem } from '@/types/overseasStock';
-import { getBatchStockPrices } from '@/services/stockCatalogApi';
 import { resolveStockName } from '@/lib/stockMap';
+import { getTrendingOverseasStocks, type OverseasTrendingResponse } from '@/services/overseasStockApi';
+import { getBatchStockPrices } from '@/services/stockCatalogApi';
+import type { OverseasStockCatalogItem } from '@/types/overseasStock';
+import { Time } from 'lightweight-charts';
+import {
+  ArrowUpRight,
+  Eye,
+  Globe,
+  Minus,
+  Sparkles,
+  Star,
+  TrendingDown,
+  TrendingUp,
+} from 'lucide-react';
+import Link from 'next/link';
+import { useMemo, useState } from 'react';
+import useSWR, { mutate } from 'swr';
 
 const HERO_CODE = '005930';
 const RECOMMENDED_CODES = ['005930', '000660', '035420', '035720'];
@@ -321,7 +316,7 @@ function useDashboardStocks(
   initialPrices: Record<string, MappedStockPrice>,
   pricesLoading: boolean,
 ): { hero: HeroSnapshot; recommended: RecommendedSnapshot[] } {
-  const { data: minutes, error: minutesError } = useSWR(
+  const { data: minutes } = useSWR(
     isVisible ? `hero-minutes-${heroCode}` : null,
     () => getMinuteCandles(heroCode),
     { dedupingInterval: 15000 },
@@ -338,7 +333,7 @@ function useDashboardStocks(
     sparkline,
     loading: pricesLoading && !heroPrice,
     error: null,
-  }), [heroCode, heroPrice, sparkline, minutesError, pricesLoading]);
+  }), [heroCode, heroPrice, sparkline, pricesLoading]);
 
   const recommended: RecommendedSnapshot[] = useMemo(() =>
     recommendedCodes.map((code) => {
@@ -589,7 +584,7 @@ function AiRecommendationsSection({ data, isLoading }: AiRecommendationsSectionP
 
 export default function Dashboard() {
   const { isAuthenticated } = useAuth();
-  const [dashboardTab, setDashboardTab] = useState<'domestic' | 'overseas'>('domestic');
+  const dashboardTab = 'domestic' as 'domestic' | 'overseas';
   const isVisible = useVisibility();
 
   const allDashboardCodes = useMemo(
@@ -614,17 +609,6 @@ export default function Dashboard() {
     isVisible ? `dashboard-ai-recommendations-${dashboardTab}` : null,
     () => getDashboardRecommendations(dashboardTab === 'domestic' ? 'DOMESTIC' : 'OVERSEAS'),
     { revalidateOnFocus: false, dedupingInterval: 30000, refreshInterval: 30000 }
-  );
-
-  const { data: portfolio } = useSWR(
-    isAuthenticated ? 'dashboard-portfolio' : null,
-    () => getPortfolio(),
-    { revalidateOnFocus: false, dedupingInterval: 30000 }
-  );
-  const { data: holdings } = useSWR(
-    isAuthenticated ? 'dashboard-holdings' : null,
-    () => getHoldings(),
-    { revalidateOnFocus: false, dedupingInterval: 30000 }
   );
 
   return (

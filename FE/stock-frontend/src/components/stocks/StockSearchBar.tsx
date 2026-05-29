@@ -1,12 +1,12 @@
 'use client';
 
-import { useState, useCallback, useRef, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import { Search } from 'lucide-react';
-import useSWR from 'swr';
-import { searchStocks } from '@/services/stockCatalogApi';
 import { resolveSectorDisplay } from '@/lib/sectorMap';
+import { searchStocks } from '@/services/stockCatalogApi';
 import type { StockCatalogItem } from '@/types/stock';
+import { Search } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import useSWR from 'swr';
 
 const fetcher = async (query: string): Promise<StockCatalogItem[]> => {
   const res = await searchStocks({ query, size: 8 });

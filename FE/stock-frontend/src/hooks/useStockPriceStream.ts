@@ -1,11 +1,11 @@
 'use client';
 
-import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { IMessage } from '@stomp/stompjs';
-import { useWebSocketContext } from '@/provider/WebSocketProvider';
-import type { RealtimeStockPriceDto } from '@/types/websocket';
 import type { MappedStockPrice } from '@/lib/api';
 import { num, parseSign } from '@/lib/fetcher';
+import { useWebSocketContext } from '@/provider/WebSocketProvider';
+import type { RealtimeStockPriceDto } from '@/types/websocket';
+import { IMessage } from '@stomp/stompjs';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 const STATIC_KEYS: (keyof MappedStockPrice)[] = [
   'upperLimit', 'lowerLimit', 'basePrice',
@@ -143,7 +143,8 @@ export function useStockPriceStreamBatch(
   const stableCodesKey = useMemo(() => [...stockCodes].sort().join(','), [stockCodes]);
 
   useEffect(() => {
-    const currentCodes = new Set(stockCodes);
+    const codesArray = stableCodesKey ? stableCodesKey.split(',') : [];
+    const currentCodes = new Set(codesArray);
     const prevCodes = new Set(subIdsRef.current.keys());
 
     if ([...currentCodes].sort().join(',') === [...prevCodes].sort().join(',')) return;
@@ -156,7 +157,7 @@ export function useStockPriceStreamBatch(
       }
     }
 
-    for (const code of stockCodes) {
+    for (const code of codesArray) {
       if (subIdsRef.current.has(code)) continue;
 
       const handlerRef = { current: (message: IMessage) => {
@@ -186,12 +187,13 @@ export function useStockPriceStreamBatch(
       subscribeBePrice(code);
     }
 
+    const currentSubIds = subIdsRef.current;
     return () => {
-      for (const [code, subId] of subIdsRef.current) {
+      for (const [code, subId] of currentSubIds) {
         unsubscribe(subId);
         unsubscribeBePrice(code);
       }
-      subIdsRef.current.clear();
+      currentSubIds.clear();
     };
   }, [stableCodesKey, subscribe, unsubscribe, subscribeBePrice, unsubscribeBePrice]);
 

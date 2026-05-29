@@ -1,8 +1,8 @@
+import { COUNTRY_FLAGS } from '@/constants/countryFlags';
+import { useInView } from '@/hooks/useInView';
+import type { OverseasStockCatalogItem, OverseasStockPrice } from '@/types/overseasStock';
 import Link from 'next/link';
 import OverseasStockPriceBadge from './OverseasStockPriceBadge';
-import { useInView } from '@/hooks/useInView';
-import { COUNTRY_FLAGS } from '@/constants/countryFlags';
-import type { OverseasStockCatalogItem, OverseasStockPrice } from '@/types/overseasStock';
 
 interface OverseasStockCardProps {
   item: OverseasStockCatalogItem;

@@ -1,36 +1,32 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
-import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import StockSearchBar from '@/components/stocks/StockSearchBar';
 import {
-  Bell,
-  User,
-  ShoppingCart,
-  Globe,
-  LogOut,
-  ChevronDown,
-  Briefcase,
-  Cpu,
-  Star,
-  X,
-} from 'lucide-react';
-import useSWR, { mutate } from 'swr';
-import { useAuth } from '@/lib/auth';
-import {
-  getSystemConfig,
+  clearAllNotifications,
+  getBasketItems,
   getFavorites,
-  toggleFavorite,
   getNotifications,
   getUnreadNotificationCount,
   readAllNotifications,
-  getBasketItems,
-  clearAllNotifications,
+  toggleFavorite,
 } from '@/lib/api';
-import StockSearchBar from '@/components/stocks/StockSearchBar';
-import OverseasStockSearchBar from '@/components/overseas/OverseasStockSearchBar';
+import { useAuth } from '@/lib/auth';
+import {
+  Bell,
+  Briefcase,
+  ChevronDown,
+  Cpu,
+  LogOut,
+  ShoppingCart,
+  Star,
+  User,
+  X
+} from 'lucide-react';
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
+import { useEffect, useRef, useState } from 'react';
+import useSWR, { mutate } from 'swr';
 
-type SearchTab = 'domestic' | 'overseas';
 
 function fmt(n: number): string {
   if (n === null || n === undefined || isNaN(n)) return '0';
@@ -58,11 +54,6 @@ export default function Navbar() {
     document.documentElement.classList.remove('dark');
     localStorage.removeItem('theme');
   }, []);
-
-  const { data: systemConfig } = useSWR('system-config', getSystemConfig, {
-    revalidateOnFocus: false,
-    dedupingInterval: 300000,
-  });
 
   const { data: favorites, isLoading: favoritesLoading } = useSWR(
     isAuthenticated ? 'user-favorites' : null,
@@ -129,12 +120,7 @@ export default function Navbar() {
     }
   };
 
-  const mockOrderEnabled = systemConfig?.mockOrderEnabled ?? null;
-
   const isDomestic = pathname === '/stocks' || pathname.startsWith('/stock/');
-  const isOverseas = pathname === '/overseas-stocks' || pathname.startsWith('/overseas-stocks/');
-
-  const searchTab: SearchTab = isOverseas ? 'overseas' : 'domestic';
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {

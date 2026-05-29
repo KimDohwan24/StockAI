@@ -1,9 +1,9 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
-import { useAuth } from '@/lib/auth';
 import { getPortfolio, PortfolioResponse } from '@/lib/api';
+import { useAuth } from '@/lib/auth';
+import { useRouter } from 'next/navigation';
+import { useCallback, useEffect, useState } from 'react';
 
 const AUTH_ONLY_PATHS = ['/onboarding'];
 

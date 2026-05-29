@@ -1,11 +1,11 @@
 'use client';
 
-import { useSearchParams, useRouter } from 'next/navigation';
+import { translateSector } from '@/lib/sectorMap';
+import { getOverseasSectors } from '@/services/overseasStockApi';
+import { ChevronDown, Languages } from 'lucide-react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import useSWR from 'swr';
-import { ChevronDown, Languages } from 'lucide-react';
-import { getOverseasSectors } from '@/services/overseasStockApi';
-import { translateSector } from '@/lib/sectorMap';
 
 export default function OverseasSectorFilter() {
   const searchParams = useSearchParams();
@@ -27,7 +27,7 @@ export default function OverseasSectorFilter() {
       params.delete('page');
       router.replace(`/overseas-stocks?${params.toString()}`);
     }
-  }, [currentSector, allSectors]);
+  }, [currentSector, allSectors, router, searchParams]);
 
   const handleChange = (value: string) => {
     const params = new URLSearchParams(searchParams.toString());

@@ -1,51 +1,50 @@
 'use client';
 
-import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
-import { useParams, useRouter } from 'next/navigation';
-import Link from 'next/link';
-import useSWR, { mutate } from 'swr';
-import StockChart, { CandlePoint } from '@/components/StockChart';
-import {
-  getStockPrice,
-  getDailyCandles,
-  getMinuteCandles,
-  getHoldings,
-  getPortfolio,
-  buyOrder,
-  sellOrder,
-  MappedStockPrice,
-  MappedDailyCandle,
-  MappedMinuteCandle,
-  OrderResult,
-  getStockAiAnalysis,
-  getSystemConfig,
-  getFavoriteStatus,
-  toggleFavorite,
-  addBasketItem,
-  deleteBasketItem,
-  getBasketItems,
-} from '@/lib/api';
 import AiDecisionGauge from '@/components/AiDecisionGauge';
 import NewsSection from '@/components/NewsSection';
+import StockChart, { CandlePoint } from '@/components/StockChart';
 import {
-  TrendingUp,
-  TrendingDown,
-  Minus,
-  Clock,
-  Calendar,
-  BarChart3,
-  Hash,
+  MappedDailyCandle,
+  MappedMinuteCandle,
+  MappedStockPrice,
+  OrderResult,
+  addBasketItem,
+  buyOrder,
+  deleteBasketItem,
+  getBasketItems,
+  getDailyCandles,
+  getFavoriteStatus,
+  getHoldings,
+  getMinuteCandles,
+  getPortfolio,
+  getStockAiAnalysis,
+  getStockPrice,
+  getSystemConfig,
+  sellOrder,
+  toggleFavorite,
+} from '@/lib/api';
+import {
   Activity,
-  Landmark,
-  ArrowUpRight,
   ArrowDownRight,
-  Star,
+  ArrowUpRight,
+  BarChart3,
+  Calendar,
+  Clock,
+  Hash,
+  Landmark,
+  Minus,
   ShoppingCart,
+  Star,
+  TrendingDown,
+  TrendingUp,
 } from 'lucide-react';
+import Link from 'next/link';
+import { useParams, useRouter } from 'next/navigation';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import useSWR, { mutate } from 'swr';
 
-import { useAuth } from '@/lib/auth';
-import { useVisibility } from '@/hooks/useVisibility';
 import { useStockPriceStream } from '@/hooks/useStockPriceStream';
+import { useAuth } from '@/lib/auth';
 import { resolveStockName } from '@/lib/stockMap';
 
 type Period = 'D' | 'W' | 'M' | 'Y';
@@ -360,7 +359,6 @@ export default function StockDetailPage() {
   const params = useParams();
   const { isAuthenticated } = useAuth();
   const stockCode = (params.code as string) || '';
-  const isVisible = useVisibility();
 
   const { data: swrPrice } = useSWR<MappedStockPrice | null>(
     stockCode ? `detail-price-${stockCode}` : null,
@@ -381,7 +379,7 @@ export default function StockDetailPage() {
 
   const { flashKey, flashClass } = usePriceFlash(priceInfo?.price);
 
-  const { data: favoriteData, mutate: mutateFavorite } = useSWR(
+  const { data: favoriteData } = useSWR(
     isAuthenticated && stockCode ? `favorite-status-${stockCode}` : null,
     () => getFavoriteStatus(stockCode),
     { revalidateOnFocus: false, dedupingInterval: 30000 }

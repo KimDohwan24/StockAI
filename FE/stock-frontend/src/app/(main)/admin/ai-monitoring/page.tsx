@@ -198,15 +198,7 @@ export default function AdminAiMonitoringPage() {
           totalOrders: aiStatusList.reduce((acc: number, curr: AdminAiStatusResponse) => acc + (curr.orderHistory?.length ?? 0), 0),
         },
         records: aiStatusList.map((ai: AdminAiStatusResponse) => {
-          const FREE_MODELS_LABELS = [
-            "Google Gemma 2",
-            "Meta Llama 3",
-            "Alibaba Qwen 2.5",
-            "Mistral 7B",
-            "Microsoft Phi-3"
-          ];
-          const modelIndex = Math.abs(ai.profile.id) % 5;
-          const assignedModel = FREE_MODELS_LABELS[modelIndex];
+          const assignedModel = "OpenRouter Free (Auto)";
 
           return {
             profile: {
@@ -624,17 +616,7 @@ export default function AdminAiMonitoringPage() {
                           {ai.profile.mockOrderEnabled ? '한투 모의투자 연동' : '로컬 가상 매매'}
                         </span>
                         <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-indigo-50 border border-indigo-200 text-indigo-700">
-                          {(() => {
-                            const FREE_MODELS_LABELS = [
-                              "Google Gemma 2",
-                              "Meta Llama 3",
-                              "Alibaba Qwen 2.5",
-                              "Mistral 7B",
-                              "Microsoft Phi-3"
-                            ];
-                            const modelIndex = Math.abs(ai.profile.id) % 5;
-                            return FREE_MODELS_LABELS[modelIndex];
-                          })()}
+                          {"OpenRouter Free (Auto)"}
                         </span>
                       </div>
                       <p className="text-xs text-steel mt-0.5">{ai.profile.email}</p>

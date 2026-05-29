@@ -239,10 +239,14 @@ public class KisApiClient {
         rateLimiter.acquire();
         String trId = "VTTC8434R"; // 모의투자
 
-        String mockCano = (kisConfig.getMock() != null && kisConfig.getMock().getAccount() != null)
+        String mockCano = (kisConfig.getMock() != null && kisConfig.getMock().getAccount() != null
+                && kisConfig.getMock().getAccount().getCano() != null
+                && !kisConfig.getMock().getAccount().getCano().trim().isEmpty())
                 ? kisConfig.getMock().getAccount().getCano()
                 : kisConfig.getAccountNo();
-        String mockAcntPrdtCd = (kisConfig.getMock() != null && kisConfig.getMock().getAccount() != null)
+        String mockAcntPrdtCd = (kisConfig.getMock() != null && kisConfig.getMock().getAccount() != null
+                && kisConfig.getMock().getAccount().getAcntPrdtCd() != null
+                && !kisConfig.getMock().getAccount().getAcntPrdtCd().trim().isEmpty())
                 ? kisConfig.getMock().getAccount().getAcntPrdtCd()
                 : kisConfig.getAccountProductCode();
 

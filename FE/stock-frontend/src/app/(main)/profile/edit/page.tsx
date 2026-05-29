@@ -1,12 +1,12 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import useSWR, { useSWRConfig } from 'swr';
-import { useAuth } from '@/lib/auth';
 import { getUserProfile, updateUserProfile } from '@/lib/api';
-import { ArrowLeft, User, DollarSign, Save } from 'lucide-react';
+import { useAuth } from '@/lib/auth';
+import { ArrowLeft, DollarSign, Save, User } from 'lucide-react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
+import useSWR, { useSWRConfig } from 'swr';
 
 export default function ProfileEditPage() {
   const router = useRouter();

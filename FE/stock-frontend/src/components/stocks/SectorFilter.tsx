@@ -1,11 +1,11 @@
 'use client';
 
-import { useSearchParams, useRouter } from 'next/navigation';
+import { resolveSectorDisplay } from '@/lib/sectorMap';
+import { getSectors } from '@/services/stockCatalogApi';
+import { ChevronDown } from 'lucide-react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect } from 'react';
 import useSWR from 'swr';
-import { ChevronDown } from 'lucide-react';
-import { getSectors } from '@/services/stockCatalogApi';
-import { resolveSectorDisplay } from '@/lib/sectorMap';
 
 export default function SectorFilter() {
   const searchParams = useSearchParams();
@@ -26,7 +26,7 @@ export default function SectorFilter() {
       params.delete('page');
       router.replace(`/stocks?${params.toString()}`);
     }
-  }, [currentSector, allSectors]);
+  }, [currentSector, allSectors, router, searchParams]);
 
   const handleChange = (value: string) => {
     const params = new URLSearchParams(searchParams.toString());

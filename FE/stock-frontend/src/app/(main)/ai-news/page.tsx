@@ -1,22 +1,21 @@
 'use client';
 
-import { useState, useMemo } from 'react';
-import Link from 'next/link';
-import useSWR from 'swr';
-import {
-  Search,
-  Newspaper,
-  Sparkles,
-  ArrowLeft,
-  ArrowUpRight,
-  TrendingUp,
-  TrendingDown,
-  Minus,
-  AlertCircle,
-  Globe,
-  RefreshCw,
-} from 'lucide-react';
 import { getAiNewsList, StockNewsItem } from '@/lib/api';
+import {
+  AlertCircle,
+  ArrowUpRight,
+  Globe,
+  Minus,
+  Newspaper,
+  RefreshCw,
+  Search,
+  Sparkles,
+  TrendingDown,
+  TrendingUp
+} from 'lucide-react';
+import Link from 'next/link';
+import { useMemo, useState } from 'react';
+import useSWR from 'swr';
 
 export default function AiNewsPage() {
   const [searchTerm, setSearchTerm] = useState('');

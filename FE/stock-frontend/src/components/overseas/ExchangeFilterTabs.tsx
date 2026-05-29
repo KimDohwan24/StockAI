@@ -1,6 +1,6 @@
 'use client';
 
-import { useSearchParams, useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 
 const TABS = [
   { label: '전체', value: '' },

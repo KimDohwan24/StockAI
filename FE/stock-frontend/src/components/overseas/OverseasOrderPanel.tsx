@@ -1,11 +1,11 @@
 'use client';
 
-import { useState, useMemo, useEffect, useCallback } from 'react';
-import useSWR, { mutate } from 'swr';
-import { buyOverseasStock, sellOverseasStock, getOverseasBalance } from '@/services/overseasStockApi';
-import { useAuth } from '@/lib/auth';
-import type { ExchangeCode } from '@/types/overseasStock';
 import { getPortfolio } from '@/lib/api';
+import { useAuth } from '@/lib/auth';
+import { buyOverseasStock, getOverseasBalance, sellOverseasStock } from '@/services/overseasStockApi';
+import type { ExchangeCode } from '@/types/overseasStock';
+import { useCallback, useMemo, useState } from 'react';
+import useSWR, { mutate } from 'swr';
 
 interface OverseasOrderPanelProps {
   ticker: string;

@@ -1,12 +1,12 @@
-import { Suspense } from 'react';
-import type { Metadata } from 'next';
-import { redirect } from 'next/navigation';
-import OverseasStockSearchBar from '@/components/overseas/OverseasStockSearchBar';
 import ExchangeFilterTabs from '@/components/overseas/ExchangeFilterTabs';
 import OverseasSectorFilter from '@/components/overseas/OverseasSectorFilter';
-import SortSelect from '@/components/stocks/SortSelect';
 import OverseasStockCatalogInfinite from '@/components/overseas/OverseasStockCatalogInfinite';
-import { getOverseasStocks, extractOverseasInitialPricesFromCatalog } from '@/services/overseasStockApi';
+import OverseasStockSearchBar from '@/components/overseas/OverseasStockSearchBar';
+import SortSelect from '@/components/stocks/SortSelect';
+import { extractOverseasInitialPricesFromCatalog, getOverseasStocks } from '@/services/overseasStockApi';
+import type { Metadata } from 'next';
+import { redirect } from 'next/navigation';
+import { Suspense } from 'react';
 
 export const metadata: Metadata = {
   title: '해외 종목 | StockAI',

@@ -1,7 +1,7 @@
 'use client';
 
-import { useSearchParams, useRouter } from 'next/navigation';
-import { ChevronDown, ArrowUpAZ, ArrowDownAZ } from 'lucide-react';
+import { ArrowDownAZ, ArrowUpAZ, ChevronDown } from 'lucide-react';
+import { useRouter, useSearchParams } from 'next/navigation';
 
 const DOMESTIC_SORT_OPTIONS = [
   { label: '기본 정렬', value: '' },

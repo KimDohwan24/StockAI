@@ -4,19 +4,11 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth';
 import {
-  Cpu,
   History,
-  TrendingUp,
-  TrendingDown,
-  Briefcase,
   Trash2,
   Download,
   ArrowLeft,
   Calendar,
-  Activity,
-  CheckCircle2,
-  XCircle,
-  ExternalLink,
   ChevronDown,
   ChevronUp,
 } from 'lucide-react';
@@ -81,11 +73,6 @@ const formatDateTime = (dateStr: string) => {
   });
 };
 
-const getStockDetailUrl = (code: string) => {
-  if (!code) return '#';
-  const isDomestic = /^\d{6}$/.test(code);
-  return isDomestic ? `/stock/${code}` : `/overseas-stocks/${code}?exchange=NAS`;
-};
 
 export default function AdminAiHistoryPage() {
   const router = useRouter();
@@ -172,7 +159,7 @@ export default function AdminAiHistoryPage() {
       document.body.appendChild(downloadAnchor);
       downloadAnchor.click();
       downloadAnchor.remove();
-    } catch (e) {
+    } catch {
       alert('파일 내보내기 실패');
     }
   };

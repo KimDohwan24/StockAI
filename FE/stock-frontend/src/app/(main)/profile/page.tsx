@@ -1,34 +1,34 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import useSWR, { mutate } from 'swr';
-import { useAuth } from '@/lib/auth';
+import OverseasBalanceTable from '@/components/overseas/OverseasBalanceTable';
 import {
-  getUserProfile,
-  getPortfolio,
   getHoldings,
-  updateAiConfig,
   getOrderHistory,
+  getPortfolio,
+  getUserProfile,
+  updateAiConfig,
 } from '@/lib/api';
+import { useAuth } from '@/lib/auth';
+import { resolveStockName } from '@/lib/stockMap';
 import { getOverseasBalance } from '@/services/overseasStockApi';
 import {
-  User,
-  Mail,
-  Calendar,
-  Shield,
-  TrendingUp,
-  TrendingDown,
-  Edit2,
-  Briefcase,
-  Layers,
-  Globe,
-  Cpu,
   ArrowUpDown,
+  Briefcase,
+  Calendar,
+  Cpu,
+  Edit2,
+  Globe,
+  Layers,
+  Mail,
+  Shield,
+  TrendingDown,
+  TrendingUp,
+  User,
 } from 'lucide-react';
-import OverseasBalanceTable from '@/components/overseas/OverseasBalanceTable';
 import Link from 'next/link';
-import { resolveStockName } from '@/lib/stockMap';
+import { useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
+import useSWR, { mutate } from 'swr';
 
 function fmt(n: number): string {
   if (n === null || n === undefined || isNaN(n)) return '0';

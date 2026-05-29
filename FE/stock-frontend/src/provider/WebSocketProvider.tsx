@@ -1,10 +1,10 @@
 'use client';
 
-import React, { createContext, useContext, useEffect, useMemo, useRef, useCallback, useState } from 'react';
-import { IMessage } from '@stomp/stompjs';
-import { wsManager } from '@/lib/websocket';
 import { useVisibility } from '@/hooks/useVisibility';
+import { wsManager } from '@/lib/websocket';
 import type { WebSocketConnectionState } from '@/types/websocket';
+import { IMessage } from '@stomp/stompjs';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 
 interface WebSocketActionsValue {
   subscribe: (destination: string, handler: (msg: IMessage) => void) => string;

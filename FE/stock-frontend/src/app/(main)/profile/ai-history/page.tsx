@@ -1,22 +1,20 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import useSWR from 'swr';
-import { useAuth } from '@/lib/auth';
 import { getOrderHistory, getUserProfile } from '@/lib/api';
+import { useAuth } from '@/lib/auth';
+import { resolveStockName } from '@/lib/stockMap';
 import {
-  Cpu,
-  TrendingUp,
-  TrendingDown,
   ArrowLeft,
   Calendar,
+  Cpu,
   Settings,
-  Info,
-  DollarSign,
+  TrendingDown,
+  TrendingUp
 } from 'lucide-react';
 import Link from 'next/link';
-import { resolveStockName } from '@/lib/stockMap';
+import { useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
+import useSWR from 'swr';
 
 // Number formatter
 function fmt(n: number): string {

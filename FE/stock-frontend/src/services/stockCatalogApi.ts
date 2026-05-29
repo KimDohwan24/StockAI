@@ -1,7 +1,7 @@
-import { fetcher, API_BASE_URL, parseSign, num } from '@/lib/fetcher';
 import type { MappedStockPrice, StockPriceResponse } from '@/lib/api';
 import { mapStockPrice } from '@/lib/api';
-import type { StockCatalogWithPriceResponse, StockCatalogItem } from '@/types/stock';
+import { API_BASE_URL, fetcher, parseSign } from '@/lib/fetcher';
+import type { StockCatalogWithPriceResponse } from '@/types/stock';
 
 export interface TrendingResponse {
   stockCode: string;

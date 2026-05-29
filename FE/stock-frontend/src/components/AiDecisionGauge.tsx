@@ -1,6 +1,6 @@
 'use client';
 
-import { Activity, ShieldCheck, AlertCircle } from 'lucide-react';
+import { Activity, AlertCircle, ShieldCheck } from 'lucide-react';
 
 interface AiDecisionGaugeProps {
   score: number; // -100 ~ 100

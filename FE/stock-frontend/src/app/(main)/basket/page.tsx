@@ -1,34 +1,27 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import useSWR, { mutate } from 'swr';
-import { useAuth } from '@/lib/auth';
-import { useRouter } from 'next/navigation';
 import {
-  getBasketItems,
-  updateBasketItem,
   deleteBasketItem,
-  toggleBasketItemActive,
+  getBasketItems,
   runBacktest,
-  type BasketItemResponse,
-  type BacktestResponse,
+  toggleBasketItemActive,
+  updateBasketItem,
+  type BacktestResponse
 } from '@/lib/api';
+import { useAuth } from '@/lib/auth';
 import {
+  AlertCircle,
+  Cpu,
+  Play,
   ShoppingCart,
   Trash2,
-  Play,
-  TrendingUp,
-  Cpu,
-  AlertCircle,
-  CheckCircle,
-  HelpCircle,
+  TrendingUp
 } from 'lucide-react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
+import useSWR, { mutate } from 'swr';
 
-function fmt(n: number): string {
-  if (n === null || n === undefined || isNaN(n)) return '0';
-  return Math.round(n).toLocaleString('ko-KR');
-}
 
 export default function BasketPage() {
   const { isAuthenticated, isLoading: authLoading } = useAuth();

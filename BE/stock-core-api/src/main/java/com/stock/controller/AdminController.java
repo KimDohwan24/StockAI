@@ -89,6 +89,12 @@ public class AdminController {
         adminService.sellAllKisMockHoldings();
         return ResponseEntity.ok().build();
     }
+
+    @PostMapping("/users/{email}/sync-kis")
+    public ResponseEntity<Void> syncKisAccount(@PathVariable String email) {
+        adminService.syncKisAccount(email);
+        return ResponseEntity.ok().build();
+    }
 }
 
 

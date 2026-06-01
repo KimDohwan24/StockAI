@@ -554,6 +554,12 @@ export async function sellAllKisMockHoldings(): Promise<void> {
   });
 }
 
+export async function syncKisAccount(email: string): Promise<void> {
+  await fetcher<void>(`${API_BASE_URL}/api/admin/users/${email}/sync-kis`, {
+    method: 'POST',
+  });
+}
+
 export interface KisMockBalanceResponse {
   success: boolean;
   cano: string;

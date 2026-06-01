@@ -124,13 +124,25 @@ public class AdminService {
         for (String email : aiEmails) {
             userRepository.findByEmail(email).ifPresent(user -> {
                 if (user.isMockOrderEnabled()) {
-                    return; // Skip resetting if KIS Mock integration is enabled
+                    try {
+                        BalanceResponse balResp = kisApiClient.getBalance();
+                        if (balResp != null && balResp.getOutput2() != null) {
+                            double prvsRcdl = Double.parseDouble(balResp.getOutput2().getPrvs_rcdl_excc_amt());
+                            user.setCashBalance(prvsRcdl);
+                            user.setInitialBalance(prvsRcdl);
+                        }
+                    } catch (Exception e) {
+                        log.error("Failed to sync cash balance after KIS reset for user={}", email, e);
+                    }
+                    user.setAiTradingEnabled(false);
+                    userRepository.save(user);
+                } else {
+                    user.setInitialBalance(100000000.0);
+                    user.setCashBalance(100000000.0);
+                    user.setAiTradingEnabled(true);
+                    user.setMockOrderEnabled(false);
+                    userRepository.save(user);
                 }
-                user.setInitialBalance(100000000.0);
-                user.setCashBalance(100000000.0);
-                user.setAiTradingEnabled(true);
-                user.setMockOrderEnabled(false);
-                userRepository.save(user);
 
                 // Delete portfolios
                 var portfolios = portfolioRepository.findByUserId(user.getId());
@@ -143,6 +155,9 @@ public class AdminService {
                 // Delete reservation purchases (BasketItems)
                 var basketItems = basketRepository.findAllByUserId(user.getId());
                 basketRepository.deleteAll(basketItems);
+
+                // Delete notifications
+                notificationRepository.deleteAllByUserId(user.getId());
             });
         }
     }
@@ -367,50 +382,51 @@ public class AdminService {
         }
     }
 
+    @Transactional
     public void sellAllKisMockHoldings() {
         // 1. KIS 모의투자 계좌의 실제 보유 종목들을 조회합니다.
         BalanceResponse response = kisApiClient.getBalance();
-        if (response == null || response.getOutput1() == null || response.getOutput1().isEmpty()) {
-            log.info("No real holdings found in KIS Mock Account to sell.");
-            return;
-        }
 
         // 2. 조회된 모든 보유 종목을 시장가(0)로 전량 매도 주문을 전송하여 즉시 청산합니다.
-        for (com.stock.infrastructure.dto.kis.BalanceItem item : response.getOutput1()) {
-            String stockCode = item.getPdno();
-            int qty = Integer.parseInt(item.getHldg_qty());
-            if (qty <= 0) continue;
+        if (response != null && response.getOutput1() != null && !response.getOutput1().isEmpty()) {
+            for (com.stock.infrastructure.dto.kis.BalanceItem item : response.getOutput1()) {
+                String stockCode = item.getPdno();
+                int qty = Integer.parseInt(item.getHldg_qty());
+                if (qty <= 0) continue;
 
-            try {
-                String mockCano = (kisConfig.getMock() != null && kisConfig.getMock().getAccount() != null
-                        && kisConfig.getMock().getAccount().getCano() != null
-                        && !kisConfig.getMock().getAccount().getCano().trim().isEmpty())
-                        ? kisConfig.getMock().getAccount().getCano()
-                        : kisConfig.getAccountNo();
-                String mockAcntPrdtCd = (kisConfig.getMock() != null && kisConfig.getMock().getAccount() != null
-                        && kisConfig.getMock().getAccount().getAcntPrdtCd() != null
-                        && !kisConfig.getMock().getAccount().getAcntPrdtCd().trim().isEmpty())
-                        ? kisConfig.getMock().getAccount().getAcntPrdtCd()
-                        : kisConfig.getAccountProductCode();
+                try {
+                    String mockCano = (kisConfig.getMock() != null && kisConfig.getMock().getAccount() != null
+                            && kisConfig.getMock().getAccount().getCano() != null
+                            && !kisConfig.getMock().getAccount().getCano().trim().isEmpty())
+                            ? kisConfig.getMock().getAccount().getCano()
+                            : kisConfig.getAccountNo();
+                    String mockAcntPrdtCd = (kisConfig.getMock() != null && kisConfig.getMock().getAccount() != null
+                            && kisConfig.getMock().getAccount().getAcntPrdtCd() != null
+                            && !kisConfig.getMock().getAccount().getAcntPrdtCd().trim().isEmpty())
+                            ? kisConfig.getMock().getAccount().getAcntPrdtCd()
+                            : kisConfig.getAccountProductCode();
 
-                com.stock.infrastructure.dto.kis.OrderRequest request = com.stock.infrastructure.dto.kis.OrderRequest.forMockSell(
-                        mockCano,
-                        mockAcntPrdtCd,
-                        stockCode,
-                        qty,
-                        0 // 항상 시장가(0) 매도로 체결 안정성 보장
-                );
-                var orderResp = kisApiClient.sellStock(request);
-                log.info("Successfully sold all real shares in KIS mock account for stock={} qty={}. Response: {}", 
-                        stockCode, qty, orderResp);
-                
-                // 한투 모의투자 초당 API 요청 제한(EGW00201) 방지를 위해 1.6초 대기 (더욱 안전하게 늘림)
-                try { Thread.sleep(1600); } catch (InterruptedException ie) { Thread.currentThread().interrupt(); }
-            } catch (Exception e) {
-                log.error("Failed to sell real KIS mock stock={}: {}. Continuing with remaining stocks.", stockCode, e.getMessage());
-                // 개별 오류 발생 시 멈추지 않고 2.5초 대기 후 다음 종목 매도 시도
-                try { Thread.sleep(2500); } catch (InterruptedException ie) { Thread.currentThread().interrupt(); }
+                    com.stock.infrastructure.dto.kis.OrderRequest request = com.stock.infrastructure.dto.kis.OrderRequest.forMockSell(
+                            mockCano,
+                            mockAcntPrdtCd,
+                            stockCode,
+                            qty,
+                            0 // 항상 시장가(0) 매도로 체결 안정성 보장
+                    );
+                    var orderResp = kisApiClient.sellStock(request);
+                    log.info("Successfully sold all real shares in KIS mock account for stock={} qty={}. Response: {}", 
+                            stockCode, qty, orderResp);
+                    
+                    // 한투 모의투자 초당 API 요청 제한(EGW00201) 방지를 위해 1.6초 대기 (더욱 안전하게 늘림)
+                    try { Thread.sleep(1600); } catch (InterruptedException ie) { Thread.currentThread().interrupt(); }
+                } catch (Exception e) {
+                    log.error("Failed to sell real KIS mock stock={}: {}. Continuing with remaining stocks.", stockCode, e.getMessage());
+                    // 개별 오류 발생 시 멈추지 않고 2.5초 대기 후 다음 종목 매도 시도
+                    try { Thread.sleep(2500); } catch (InterruptedException ie) { Thread.currentThread().interrupt(); }
+                }
             }
+        } else {
+            log.info("No real holdings found in KIS Mock Account to sell.");
         }
 
         // 3. 로컬 DB 상에 보존되어 있는 모든 KIS 에이전트 계정들의 포트폴리오를 비우고 잔고를 실제 한투 계좌 예수금 잔고로 동기화합니다.
@@ -432,10 +448,72 @@ public class AdminService {
                 var portfolios = portfolioRepository.findByUserId(user.getId());
                 portfolioRepository.deleteAll(portfolios);
 
+                // 주문 내역 및 예약 주문 비우기
+                var orderHistories = orderHistoryRepository.findAllByUserIdOrderByCreatedAtDesc(user.getId());
+                orderHistoryRepository.deleteAll(orderHistories);
+
+                var basketItems = basketRepository.findAllByUserId(user.getId());
+                basketRepository.deleteAll(basketItems);
+
+                notificationRepository.deleteAllByUserId(user.getId());
+
                 // 알림 생성
                 notificationRepository.save(new Notification(user.getId(), "관리자에 의해 한투 연동 계좌의 모든 보유 주식이 전액 매도(청산)되었습니다."));
             });
         }
+    }
+
+    @Transactional
+    public void syncKisAccount(String email) {
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new IllegalArgumentException("사용자를 찾을 수 없습니다: " + email));
+
+        if (!user.isMockOrderEnabled()) {
+            throw new IllegalArgumentException("한투 연동 모드가 아닌 사용자입니다: " + email);
+        }
+
+        // 1. KIS 모의투자 계좌의 실시간 원장 잔고 및 보유 종목 조회
+        BalanceResponse response = kisApiClient.getBalance();
+        if (response == null) {
+            throw new RuntimeException("한투 API 호출에 실패했습니다.");
+        }
+
+        // 2. KIS 계좌의 예수금 및 총 평가금액 파싱
+        double cashBalance = 0.0;
+        double initialBalance = 100000000.0; // 기본값 1억
+        if (response.getOutput2() != null) {
+            BalanceSummary summary = response.getOutput2();
+            cashBalance = summary.getPrvs_rcdl_excc_amt() != null ? Double.parseDouble(summary.getPrvs_rcdl_excc_amt()) : 0.0;
+            double totEvlu = summary.getTot_evlu_amt() != null ? Double.parseDouble(summary.getTot_evlu_amt()) : 0.0;
+            initialBalance = totEvlu > 0 ? totEvlu : cashBalance;
+        }
+
+        // 3. 로컬 DB 유저 잔고 동기화
+        user.setCashBalance(cashBalance);
+        user.setInitialBalance(initialBalance);
+        userRepository.save(user);
+
+        // 4. 로컬 DB 보유 주식(Portfolio) 동기화
+        // 기존 포트폴리오 비우기
+        var oldPortfolios = portfolioRepository.findByUserId(user.getId());
+        portfolioRepository.deleteAll(oldPortfolios);
+
+        // KIS 실제 보유 주식들을 유저 포트폴리오로 복사/삽입
+        if (response.getOutput1() != null) {
+            for (com.stock.infrastructure.dto.kis.BalanceItem item : response.getOutput1()) {
+                String stockCode = item.getPdno();
+                int qty = Integer.parseInt(item.getHldg_qty());
+                if (qty <= 0) continue;
+
+                double avgPrice = Double.parseDouble(item.getPchs_avg_pric());
+                String stockName = item.getPrdt_name() != null ? item.getPrdt_name() : stockCode;
+
+                Portfolio portfolio = new Portfolio(user.getId(), stockCode, stockName, qty, avgPrice, null);
+                portfolioRepository.save(portfolio);
+            }
+        }
+
+        log.info("Successfully synced KIS account state to DB for user={}", email);
     }
 }
 

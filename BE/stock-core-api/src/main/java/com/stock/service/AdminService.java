@@ -329,13 +329,13 @@ public class AdminService {
     public Map<String, Object> getKisMockBalance() {
         try {
             BalanceResponse response = kisApiClient.getBalance();
-            if (response == null || response.getOutput2() == null) {
+            if (response == null || response.getOutput2() == null || response.getOutput2().isEmpty()) {
                 return Map.of(
                     "success", false,
                     "error", "KIS API returned empty balance data."
                 );
             }
-            BalanceSummary summary = response.getOutput2();
+            BalanceSummary summary = response.getOutput2().get(0);
             
             String mockCano = (kisConfig.getMock() != null && kisConfig.getMock().getAccount() != null
                     && kisConfig.getMock().getAccount().getCano() != null)

@@ -10,7 +10,7 @@ public class BalanceResponse {
     private String msg_cd;
     private String msg1;
     private List<BalanceItem> output1;
-    private BalanceSummary output2;
+    private List<BalanceSummary> output2;
 
     public boolean isSuccess() {
         return "0".equals(rt_cd);

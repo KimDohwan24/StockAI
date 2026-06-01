@@ -24,7 +24,11 @@ public class StockAccountService {
     }
 
     public BalanceSummary getBalanceSummary() {
-        return getBalanceFull().getOutput2();
+        List<BalanceSummary> output2 = getBalanceFull().getOutput2();
+        if (output2 == null || output2.isEmpty()) {
+            return new BalanceSummary();
+        }
+        return output2.get(0);
     }
 
     public List<RealizedProfitItem> getRealizedProfit() {

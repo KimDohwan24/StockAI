@@ -536,68 +536,76 @@ export default function AdminAiMonitoringPage() {
         </div>
 
         {/* KIS Mock Account Real Balance Dashboard */}
-        <div className="relative overflow-hidden bg-gradient-to-tr from-slate-900 via-slate-800 to-indigo-950 border border-slate-700/60 rounded-[32px] p-6 sm:p-8 shadow-xl text-white">
-          <div className="absolute top-0 right-0 -mt-10 -mr-10 w-48 h-48 bg-indigo-500 rounded-full blur-3xl opacity-35 pointer-events-none" />
-          <div className="absolute -bottom-10 -left-10 w-48 h-48 bg-emerald-500 rounded-full blur-3xl opacity-20 pointer-events-none" />
+        <div className="bg-white border border-[#dee3e9] rounded-[32px] p-6 sm:p-8 shadow-sm text-[#1c1e21] relative overflow-hidden">
+          {/* Subtle design element */}
+          <div className="absolute top-0 right-0 -mt-12 -mr-12 w-40 h-40 bg-[#0064e0]/5 rounded-full blur-2xl pointer-events-none" />
 
-          <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 mb-6">
+          <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 mb-8">
             <div>
-              <div className="flex items-center gap-2 mb-2">
-                <Shield className="w-5 h-5 text-emerald-400" />
-                <span className="text-xs font-extrabold text-emerald-400 tracking-wider uppercase">KIS OpenAPI Live Account Status</span>
+              <div className="flex items-center gap-2 mb-2.5">
+                <Shield className="w-5 h-5 text-[#0064e0]" />
+                <span className="bg-[#0064e0]/8 text-[#0064e0] font-extrabold text-[11px] tracking-wider uppercase px-2.5 py-0.5 rounded-full">
+                  KIS OpenAPI Live Account Status
+                </span>
               </div>
-              <h2 className="text-2xl font-black tracking-tight">한국투자증권 모의투자 연동 계좌 현황</h2>
-              <p className="text-slate-400 text-xs mt-1">
+              <h2 className="text-2xl font-black text-[#0a1317] tracking-tight">한국투자증권 모의투자 연동 계좌 현황</h2>
+              <p className="text-[#444950] text-xs mt-1">
                 모든 KIS 연동 AI 모델들이 공유하여 거래하는 실제 증권사 모의투자 계좌의 실시간 원장 잔고입니다.
               </p>
             </div>
             {kisMockBalance && kisMockBalance.success && (
-              <div className="flex items-center gap-3 bg-white/10 px-4 py-2.5 rounded-2xl border border-white/10 w-full lg:w-auto justify-between lg:justify-start">
-                <span className="text-xs text-slate-300 font-bold">연동 계좌번호</span>
-                <span className="text-sm font-black tracking-wide text-emerald-400">{kisMockBalance.cano}</span>
+              <div className="flex items-center gap-3 bg-[#f1f4f7] border border-[#dee3e9] px-4.5 py-2.5 rounded-full w-full lg:w-auto justify-between lg:justify-start">
+                <span className="text-xs text-[#5d6c7b] font-bold">연동 계좌번호</span>
+                <span className="text-sm font-black tracking-wide text-[#0064e0] bg-white border border-[#dee3e9] px-3 py-0.5 rounded-full shadow-sm">{kisMockBalance.cano}</span>
               </div>
             )}
           </div>
 
           {!kisMockBalance ? (
-            <div className="flex items-center justify-center py-8 text-slate-400 text-sm font-semibold gap-2.5 bg-white/5 border border-white/10 rounded-2xl">
-              <span className="animate-spin rounded-full h-4.5 w-4.5 border-2 border-emerald-400 border-t-transparent" />
-              한투 모의투자 계좌 잔고를 불러오는 중입니다...
+            <div className="flex items-center justify-center py-10 text-[#5d6c7b] text-sm font-bold gap-3 bg-[#f1f4f7]/50 border border-[#dee3e9] rounded-[24px]">
+              <span className="animate-spin rounded-full h-5 w-5 border-2 border-[#0064e0] border-t-transparent" />
+              한투 모의투자 계좌 잔고를 조회 중입니다...
             </div>
           ) : !kisMockBalance.success ? (
-            <div className="bg-rose-500/10 border border-rose-500/20 rounded-2xl p-5 text-rose-300 text-xs flex flex-col gap-2">
-              <div className="font-extrabold flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
-                한투 OpenAPI 실시간 잔고 조회에 실패하였습니다.
+            <div className="bg-[#f0284a]/5 border border-[#f0284a]/15 rounded-[24px] p-6 text-[#f0284a] text-xs flex flex-col gap-2.5 shadow-sm">
+              <div className="font-extrabold flex items-center gap-2 text-sm text-[#f0284a]">
+                <span className="w-2.5 h-2.5 rounded-full bg-[#f0284a] animate-pulse" />
+                한투 OpenAPI 실시간 잔고 조회 실패
               </div>
-              <p className="text-slate-400 text-xs">
-                원인: {kisMockBalance.error || "백엔드 API 호출 오류 (서버 미재기동 또는 KIS 인증 정보 확인 요망)"}
+              <p className="text-[#444950] text-xs leading-relaxed">
+                <span className="font-bold text-[#f0284a]">원인:</span> {kisMockBalance.error || "백엔드 API 호출 오류 (서버 미재기동 또는 KIS 인증 정보 확인 요망)"}
               </p>
-              <p className="text-slate-500 text-[10px] mt-1 font-bold">
-                ※ 새로운 백엔드 API가 아직 도커(Docker) 컨테이너에 빌드 및 반영되지 않았을 수 있습니다. 터미널에서 `docker compose up --build -d stock-core-api` 명령어를 사용하여 재빌드 및 재구동을 진행해 주시기 바랍니다.
-              </p>
+              <div className="mt-2 pt-3 border-t border-[#f0284a]/10 text-[#5d6c7b] leading-relaxed">
+                <p className="font-bold text-[#1c1e21] mb-1">💡 백엔드 컨테이너 빌드 필요 안내</p>
+                <p className="text-[11px]">
+                  새로운 백엔드 API 규격이 아직 도커 컨테이너에 적용되지 않았을 수 있습니다. 터미널(WSL2 등)에서 아래 명령어를 실행하여 컨테이너를 재시작해 주십시오:
+                </p>
+                <code className="inline-block bg-[#f1f4f7] text-[#0a1317] border border-[#dee3e9] px-2 py-1 rounded mt-1.5 font-mono text-[10px] select-all">
+                  docker compose up --build -d stock-core-api
+                </code>
+              </div>
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-              <div className="bg-white/5 border border-white/10 rounded-2xl p-5">
-                <p className="text-xs text-slate-400 font-bold mb-1">실시간 주문가능 예수금</p>
-                <p className="text-xl font-extrabold text-emerald-400">{fmt(kisMockBalance.prvsRcdlExccAmt)}원</p>
-                <p className="text-[10px] text-slate-500 mt-1">한투 API 실제 주문 가능 금액</p>
+              <div className="bg-[#f1f4f7] border border-[#dee3e9] rounded-[20px] p-5 shadow-sm">
+                <p className="text-xs text-[#5d6c7b] font-bold mb-1.5">실시간 주문가능 예수금</p>
+                <p className="text-2xl font-black text-[#31a24c] tracking-tight">{fmt(kisMockBalance.prvsRcdlExccAmt)}원</p>
+                <p className="text-[10px] text-[#8595a4] mt-1 font-medium">한투 API 실제 주문 가능 잔고</p>
               </div>
-              <div className="bg-white/5 border border-white/10 rounded-2xl p-5">
-                <p className="text-xs text-slate-400 font-bold mb-1">금일 누적 매수 주문</p>
-                <p className="text-xl font-extrabold text-amber-400">{fmt(kisMockBalance.thdtBuyAmt)}원</p>
-                <p className="text-[10px] text-slate-500 mt-1">오늘 하루 동안 체결/체결대기 중인 매수 총액</p>
+              <div className="bg-[#f1f4f7] border border-[#dee3e9] rounded-[20px] p-5 shadow-sm">
+                <p className="text-xs text-[#5d6c7b] font-bold mb-1.5">금일 누적 매수 주문</p>
+                <p className="text-2xl font-black text-[#f2a918] tracking-tight">{fmt(kisMockBalance.thdtBuyAmt)}원</p>
+                <p className="text-[10px] text-[#8595a4] mt-1 font-medium">오늘 체결/대기 중인 매수 총액</p>
               </div>
-              <div className="bg-white/5 border border-white/10 rounded-2xl p-5">
-                <p className="text-xs text-slate-400 font-bold mb-1">보유 주식 평가금액</p>
-                <p className="text-xl font-extrabold text-indigo-300">{fmt(kisMockBalance.sctsEvluAmt)}원</p>
-                <p className="text-[10px] text-slate-500 mt-1">계좌 내 주식 평가자산 총액</p>
+              <div className="bg-[#f1f4f7] border border-[#dee3e9] rounded-[20px] p-5 shadow-sm">
+                <p className="text-xs text-[#5d6c7b] font-bold mb-1.5">보유 주식 평가금액</p>
+                <p className="text-2xl font-black text-[#0064e0] tracking-tight">{fmt(kisMockBalance.sctsEvluAmt)}원</p>
+                <p className="text-[10px] text-[#8595a4] mt-1 font-medium">계좌 내 주식 평가자산 총액</p>
               </div>
-              <div className="bg-white/5 border border-white/10 rounded-2xl p-5">
-                <p className="text-xs text-slate-400 font-bold mb-1">계좌 총 평가 자산</p>
-                <p className="text-xl font-extrabold text-white">{fmt(kisMockBalance.totEvluAmt)}원</p>
-                <p className="text-[10px] text-slate-500 mt-1">예수금 + 주식 평가 가치 합산</p>
+              <div className="bg-[#f1f4f7] border border-[#dee3e9] rounded-[20px] p-5 shadow-sm">
+                <p className="text-xs text-[#5d6c7b] font-bold mb-1.5">계좌 총 평가 자산</p>
+                <p className="text-2xl font-black text-[#0a1317] tracking-tight">{fmt(kisMockBalance.totEvluAmt)}원</p>
+                <p className="text-[10px] text-[#8595a4] mt-1 font-medium">예수금 + 주식 평가 가치 합산</p>
               </div>
             </div>
           )}

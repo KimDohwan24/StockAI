@@ -142,7 +142,7 @@ public class AiTradingScheduler {
                         "meta-llama/llama-3-8b-instruct:free",
                         "qwen/qwen-2.5-7b-instruct:free",
                         "mistralai/mistral-7b-instruct:free",
-                        "microsoft/phi-3-medium-128k-intro:free" // Note: can use mistral or phi-3
+                        "microsoft/phi-3-mini-128k-instruct:free" // Note: can use mistral or phi-3
                 );
                 // Correct model IDs
                 List<String> actualFreeModels = List.of(
@@ -150,7 +150,7 @@ public class AiTradingScheduler {
                         "meta-llama/llama-3-8b-instruct:free",
                         "qwen/qwen-2.5-7b-instruct:free",
                         "mistralai/mistral-7b-instruct:free",
-                        "microsoft/phi-3-medium-128k-intro:free"
+                        "microsoft/phi-3-mini-128k-instruct:free"
                 );
                 String assignedModel = actualFreeModels.get(modelIndex);
                 log.info("User={} (ID={}) using AI Model: {} to evaluate {} stocks", 

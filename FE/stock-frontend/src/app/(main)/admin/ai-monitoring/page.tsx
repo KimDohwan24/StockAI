@@ -85,6 +85,17 @@ export default function AdminAiMonitoringPage() {
     { refreshInterval: 10000, dedupingInterval: 5000 }
   );
 
+  const [refreshingKis, setRefreshingKis] = useState(false);
+
+  const handleRefreshKis = async () => {
+    setRefreshingKis(true);
+    try {
+      await mutateKisBalance();
+    } finally {
+      setTimeout(() => setRefreshingKis(false), 600);
+    }
+  };
+
   const [sellingAll, setSellingAll] = useState<Record<string, boolean>>({});
 
   const handleSellAll = async (email: string) => {
@@ -131,12 +142,13 @@ export default function AdminAiMonitoringPage() {
       const subId = wsManager.subscribe('/topic/ai-trade-event', (message) => {
         console.log('AI Trade Event Received via WebSocket, refreshing data...', message.body);
         mutate();
+        mutateKisBalance();
       });
       return () => {
         wsManager.unsubscribe(subId);
       };
     }
-  }, [isAuthenticated, user, mutate]);
+  }, [isAuthenticated, user, mutate, mutateKisBalance]);
 
   const [resetting, setResetting] = useState(false);
   const [expandedReasons, setExpandedReasons] = useState<Record<number, boolean>>({});
@@ -568,7 +580,17 @@ export default function AdminAiMonitoringPage() {
                   KIS OpenAPI Live Account Status
                 </span>
               </div>
-              <h2 className="text-2xl font-bold text-[#0a1317] tracking-tight">한국투자증권 모의투자 연동 계좌 현황</h2>
+              <div className="flex items-center gap-2.5">
+                <h2 className="text-2xl font-bold text-[#0a1317] tracking-tight">한국투자증권 모의투자 연동 계좌 현황</h2>
+                <button
+                  onClick={handleRefreshKis}
+                  disabled={refreshingKis}
+                  className="p-1.5 text-[#5d6c7b] hover:text-[#0064e0] hover:bg-[#f1f4f7] disabled:opacity-50 rounded-full transition-all cursor-pointer flex items-center justify-center shrink-0"
+                  title="실시간 원장 잔고 새로고침"
+                >
+                  <RefreshCw className={`w-4 h-4 ${refreshingKis ? 'animate-spin' : ''}`} />
+                </button>
+              </div>
               <p className="text-[#444950] text-xs mt-1">
                 모든 KIS 연동 AI 모델들이 공유하여 거래하는 실제 증권사 모의투자 계좌의 실시간 원장 잔고입니다.
               </p>

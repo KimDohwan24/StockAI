@@ -6,6 +6,7 @@ import com.stock.controller.dto.PortfolioResponse;
 import com.stock.controller.dto.UserProfileResponse;
 import com.stock.domain.favorite.FavoriteStock;
 import com.stock.domain.favorite.FavoriteStockRepository;
+import com.stock.domain.basket.BasketRepository;
 import com.stock.domain.portfolio.Portfolio;
 import com.stock.domain.portfolio.PortfolioRepository;
 import com.stock.domain.repository.OrderHistoryRepository;
@@ -38,6 +39,7 @@ public class AdminService {
     private final FavoriteStockRepository favoriteStockRepository;
     private final StringRedisTemplate redisTemplate;
     private final AiServerClient aiServerClient;
+    private final BasketRepository basketRepository;
     private final StockMasterRepository stockMasterRepository;
     private final OverseasStockMasterRepository overseasStockMasterRepository;
 
@@ -109,9 +111,13 @@ public class AdminService {
         );
         for (String email : aiEmails) {
             userRepository.findByEmail(email).ifPresent(user -> {
+                if (user.isMockOrderEnabled()) {
+                    return; // Skip resetting if KIS Mock integration is enabled
+                }
                 user.setInitialBalance(100000000.0);
                 user.setCashBalance(100000000.0);
                 user.setAiTradingEnabled(true);
+                user.setMockOrderEnabled(false);
                 userRepository.save(user);
 
                 // Delete portfolios
@@ -121,6 +127,10 @@ public class AdminService {
                 // Delete order histories
                 var orderHistories = orderHistoryRepository.findAllByUserIdOrderByCreatedAtDesc(user.getId());
                 orderHistoryRepository.deleteAll(orderHistories);
+
+                // Delete reservation purchases (BasketItems)
+                var basketItems = basketRepository.findAllByUserId(user.getId());
+                basketRepository.deleteAll(basketItems);
             });
         }
     }
@@ -258,6 +268,15 @@ public class AdminService {
             "isDomesticFallback", domesticCount <= 50,
             "isOverseasFallback", false
         );
+    }
+
+    @Transactional
+    public void resetUserReservations(String email) {
+        userRepository.findByEmail(email).ifPresent(user -> {
+            var basketItems = basketRepository.findAllByUserId(user.getId());
+            basketRepository.deleteAll(basketItems);
+            log.info("Successfully reset reservations (basket items) for user: {}", email);
+        });
     }
 }
 

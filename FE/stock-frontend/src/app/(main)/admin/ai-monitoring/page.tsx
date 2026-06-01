@@ -1,6 +1,6 @@
 'use client';
 
-import { AdminAiStatusResponse, getAdminAiStatus, getAdminSystemStatus, HoldingResponse, resetAiAccounts, syncDomesticStocks, syncNaverNews, syncOverseasStocks, toggleUserAiTrading, toggleUserMockOrder, updateUserInitialBalance } from '@/lib/api';
+import { AdminAiStatusResponse, getAdminAiStatus, getAdminSystemStatus, HoldingResponse, resetAiAccounts, resetUserReservations, syncDomesticStocks, syncNaverNews, syncOverseasStocks, toggleUserAiTrading, toggleUserMockOrder, updateUserInitialBalance } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { resolveStockName } from '@/lib/stockMap';
 import { wsManager } from '@/lib/websocket';
@@ -115,6 +115,25 @@ export default function AdminAiMonitoringPage() {
       alert(`초기화 실패: ${msg || '알 수 없는 오류가 발생했습니다.'}`);
     } finally {
       setResetting(false);
+    }
+  };
+
+  const [resettingReservations, setResettingReservations] = useState<Record<string, boolean>>({});
+
+  const handleResetReservations = async (email: string) => {
+    if (!window.confirm('이 AI 계정의 대기 중인 모든 예약 주문(매수/매도)을 초기화하시겠습니까?')) {
+      return;
+    }
+    setResettingReservations((prev) => ({ ...prev, [email]: true }));
+    try {
+      await resetUserReservations(email);
+      alert('예약 주문이 성공적으로 초기화되었습니다.');
+      mutate();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : '알 수 없는 오류';
+      alert(`초기화 실패: ${msg || '알 수 없는 오류가 발생했습니다.'}`);
+    } finally {
+      setResettingReservations((prev) => ({ ...prev, [email]: false }));
     }
   };
 
@@ -803,10 +822,22 @@ export default function AdminAiMonitoringPage() {
 
                     {/* 예약 주문 대기 */}
                     <div className="space-y-3">
-                      <h3 className="text-base font-extrabold text-ink flex items-center gap-2">
-                        <History className="w-4.5 h-4.5 text-amber-500" />
-                        예약 주문 대기 ({reservationHoldings.length}종목)
-                      </h3>
+                      <div className="flex justify-between items-center">
+                        <h3 className="text-base font-extrabold text-ink flex items-center gap-2">
+                          <History className="w-4.5 h-4.5 text-amber-500" />
+                          예약 주문 대기 ({reservationHoldings.length}종목)
+                        </h3>
+                        {reservationHoldings.length > 0 && (
+                          <button
+                            onClick={() => handleResetReservations(ai.profile.email)}
+                            disabled={resettingReservations[ai.profile.email]}
+                            className="text-[10px] px-2 py-1 bg-amber-50 border border-amber-200 hover:bg-amber-100 hover:border-amber-300 disabled:opacity-50 text-amber-700 font-bold rounded-lg cursor-pointer flex items-center gap-1 transition-all shadow-sm"
+                          >
+                            <RotateCcw className={`w-3 h-3 ${resettingReservations[ai.profile.email] ? 'animate-spin' : ''}`} />
+                            예약 초기화
+                          </button>
+                        )}
+                      </div>
                       {reservationHoldings.length > 0 ? (
                         <div className="border border-hairline-soft rounded-2xl overflow-hidden max-h-[220px] overflow-y-auto">
                           <table className="w-full text-left border-collapse text-xs">

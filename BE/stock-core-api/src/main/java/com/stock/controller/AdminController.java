@@ -56,6 +56,12 @@ public class AdminController {
         return ResponseEntity.ok().build();
     }
 
+    @PostMapping("/users/{email}/reservations/reset")
+    public ResponseEntity<Void> resetUserReservations(@PathVariable String email) {
+        adminService.resetUserReservations(email);
+        return ResponseEntity.ok().build();
+    }
+
     @PostMapping("/news/sync")
     public ResponseEntity<Integer> syncNaverNews() {
         int count = adminService.syncNaverNews();

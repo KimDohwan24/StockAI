@@ -536,6 +536,12 @@ export async function toggleUserAiTrading(email: string, enabled: boolean): Prom
   });
 }
 
+export async function resetUserReservations(email: string): Promise<void> {
+  await fetcher<void>(`${API_BASE_URL}/api/admin/users/${email}/reservations/reset`, {
+    method: 'POST',
+  });
+}
+
 
 
 

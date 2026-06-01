@@ -542,6 +542,28 @@ export async function resetUserReservations(email: string): Promise<void> {
   });
 }
 
+export async function sellAllUserHoldings(email: string): Promise<void> {
+  await fetcher<void>(`${API_BASE_URL}/api/admin/users/${email}/sell-all`, {
+    method: 'POST',
+  });
+}
+
+export interface KisMockBalanceResponse {
+  success: boolean;
+  cano: string;
+  totalBalance: number;
+  nxdyExccAmt: number;
+  prvsRcdlExccAmt: number;
+  thdtBuyAmt: number;
+  sctsEvluAmt: number;
+  totEvluAmt: number;
+  error?: string;
+}
+
+export async function getKisMockBalance(): Promise<KisMockBalanceResponse> {
+  return fetcher<KisMockBalanceResponse>(`${API_BASE_URL}/api/admin/kis/mock-balance`);
+}
+
 
 
 

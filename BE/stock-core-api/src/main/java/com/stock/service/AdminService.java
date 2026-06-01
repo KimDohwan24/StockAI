@@ -12,6 +12,11 @@ import com.stock.domain.portfolio.PortfolioRepository;
 import com.stock.domain.repository.OrderHistoryRepository;
 import com.stock.domain.repository.UserRepository;
 import com.stock.infrastructure.client.AiServerClient;
+import com.stock.domain.entity.User;
+import com.stock.infrastructure.client.KisApiClient;
+import com.stock.config.KisConfig;
+import com.stock.infrastructure.dto.kis.BalanceResponse;
+import com.stock.infrastructure.dto.kis.BalanceSummary;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -42,6 +47,10 @@ public class AdminService {
     private final BasketRepository basketRepository;
     private final StockMasterRepository stockMasterRepository;
     private final OverseasStockMasterRepository overseasStockMasterRepository;
+    private final StockOrderService stockOrderService;
+    private final StockPriceService stockPriceService;
+    private final KisApiClient kisApiClient;
+    private final KisConfig kisConfig;
 
 
 
@@ -277,6 +286,79 @@ public class AdminService {
             basketRepository.deleteAll(basketItems);
             log.info("Successfully reset reservations (basket items) for user: {}", email);
         });
+    }
+
+    @Transactional
+    public void sellAllHoldings(String email) {
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new IllegalArgumentException("사용자를 찾을 수 없습니다: " + email));
+        
+        List<Portfolio> holdings = portfolioRepository.findByUserId(user.getId());
+        if (holdings.isEmpty()) {
+            log.info("No holdings found for user {} to sell.", email);
+            return;
+        }
+
+        for (Portfolio h : holdings) {
+            try {
+                int currentPrice = 0;
+                try {
+                    var priceResp = stockPriceService.getCurrentPrice(h.getTicker());
+                    if (priceResp != null && priceResp.getStck_prpr() != null) {
+                        currentPrice = Integer.parseInt(priceResp.getStck_prpr().trim());
+                    }
+                } catch (Exception e) {
+                    log.error("Failed to fetch live price for {} to sell all: {}", h.getTicker(), e.getMessage());
+                }
+
+                if (currentPrice <= 0) {
+                    currentPrice = (int) h.getAvgPrice();
+                }
+
+                stockOrderService.sell(email, h.getTicker(), h.getQuantity(), currentPrice, "ADMIN", "관리자에 의한 자산 전액 매도");
+                log.info("Successfully sold all shares for user={} stock={} qty={} price={}", 
+                        email, h.getTicker(), h.getQuantity(), currentPrice);
+            } catch (Exception e) {
+                log.error("Failed to execute automatic sell all for user={} stock={}: {}", 
+                        email, h.getTicker(), e.getMessage());
+                throw new RuntimeException("전액 매도 중 오류가 발생했습니다: " + e.getMessage(), e);
+            }
+        }
+    }
+
+    public Map<String, Object> getKisMockBalance() {
+        try {
+            BalanceResponse response = kisApiClient.getBalance();
+            if (response == null || response.getOutput2() == null) {
+                return Map.of(
+                    "success", false,
+                    "error", "KIS API returned empty balance data."
+                );
+            }
+            BalanceSummary summary = response.getOutput2();
+            
+            String mockCano = (kisConfig.getMock() != null && kisConfig.getMock().getAccount() != null
+                    && kisConfig.getMock().getAccount().getCano() != null)
+                    ? kisConfig.getMock().getAccount().getCano()
+                    : kisConfig.getAccountNo();
+
+            return Map.of(
+                "success", true,
+                "cano", mockCano != null ? mockCano : "",
+                "totalBalance", summary.getDnca_tot_amt() != null ? Double.parseDouble(summary.getDnca_tot_amt()) : 0.0,
+                "nxdyExccAmt", summary.getNxdy_excc_amt() != null ? Double.parseDouble(summary.getNxdy_excc_amt()) : 0.0,
+                "prvsRcdlExccAmt", summary.getPrvs_rcdl_excc_amt() != null ? Double.parseDouble(summary.getPrvs_rcdl_excc_amt()) : 0.0,
+                "thdtBuyAmt", summary.getThdt_buy_amt() != null ? Double.parseDouble(summary.getThdt_buy_amt()) : 0.0,
+                "sctsEvluAmt", summary.getScts_evlu_amt() != null ? Double.parseDouble(summary.getScts_evlu_amt()) : 0.0,
+                "totEvluAmt", summary.getTot_evlu_amt() != null ? Double.parseDouble(summary.getTot_evlu_amt()) : 0.0
+            );
+        } catch (Exception e) {
+            log.error("Failed to query KIS Mock Balance in admin dashboard: {}", e.getMessage());
+            return Map.of(
+                "success", false,
+                "error", e.getMessage()
+            );
+        }
     }
 }
 

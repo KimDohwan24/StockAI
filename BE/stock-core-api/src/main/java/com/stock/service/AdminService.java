@@ -22,6 +22,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.cache.annotation.CacheEvict;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -383,6 +384,7 @@ public class AdminService {
     }
 
     @Transactional
+    @CacheEvict(value = "accountBalance", allEntries = true)
     public void sellAllKisMockHoldings() {
         // 1. KIS 모의투자 계좌의 실제 보유 종목들을 조회합니다.
         BalanceResponse response = kisApiClient.getBalance();

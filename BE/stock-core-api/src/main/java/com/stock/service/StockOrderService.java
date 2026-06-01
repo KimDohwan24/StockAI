@@ -18,6 +18,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.cache.annotation.CacheEvict;
 
 import com.stock.domain.overseas.OverseasStockMaster;
 import com.stock.domain.overseas.OverseasStockMasterRepository;
@@ -45,11 +46,13 @@ public class StockOrderService {
     }
 
     @Transactional
+    @CacheEvict(value = "accountBalance", allEntries = true)
     public OrderResponse buy(String email, String stockCode, int quantity, int price, String orderedBy) {
         return buy(email, stockCode, quantity, price, orderedBy, null);
     }
 
     @Transactional
+    @CacheEvict(value = "accountBalance", allEntries = true)
     public OrderResponse buy(String email, String stockCode, int quantity, int price, String orderedBy, String reason) {
         // 1. Fetch User and calculate order amount
         User user = userRepository.findByEmail(email)
@@ -123,11 +126,13 @@ public class StockOrderService {
     }
 
     @Transactional
+    @CacheEvict(value = "accountBalance", allEntries = true)
     public OrderResponse sell(String email, String stockCode, int quantity, int price, String orderedBy) {
         return sell(email, stockCode, quantity, price, orderedBy, null);
     }
 
     @Transactional
+    @CacheEvict(value = "accountBalance", allEntries = true)
     public OrderResponse sell(String email, String stockCode, int quantity, int price, String orderedBy, String reason) {
         // 1. Fetch User and check existing holding quantity
         User user = userRepository.findByEmail(email)

@@ -536,28 +536,48 @@ export default function AdminAiMonitoringPage() {
         </div>
 
         {/* KIS Mock Account Real Balance Dashboard */}
-        {kisMockBalance && kisMockBalance.success && (
-          <div className="relative overflow-hidden bg-gradient-to-tr from-slate-900 via-slate-800 to-indigo-950 border border-slate-700/60 rounded-[32px] p-6 sm:p-8 shadow-xl text-white">
-            <div className="absolute top-0 right-0 -mt-10 -mr-10 w-48 h-48 bg-indigo-500 rounded-full blur-3xl opacity-35 pointer-events-none" />
-            <div className="absolute -bottom-10 -left-10 w-48 h-48 bg-emerald-500 rounded-full blur-3xl opacity-20 pointer-events-none" />
+        <div className="relative overflow-hidden bg-gradient-to-tr from-slate-900 via-slate-800 to-indigo-950 border border-slate-700/60 rounded-[32px] p-6 sm:p-8 shadow-xl text-white">
+          <div className="absolute top-0 right-0 -mt-10 -mr-10 w-48 h-48 bg-indigo-500 rounded-full blur-3xl opacity-35 pointer-events-none" />
+          <div className="absolute -bottom-10 -left-10 w-48 h-48 bg-emerald-500 rounded-full blur-3xl opacity-20 pointer-events-none" />
 
-            <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 mb-6">
-              <div>
-                <div className="flex items-center gap-2 mb-2">
-                  <Shield className="w-5 h-5 text-emerald-400" />
-                  <span className="text-xs font-extrabold text-emerald-400 tracking-wider uppercase">KIS OpenAPI Live Account Status</span>
-                </div>
-                <h2 className="text-2xl font-black tracking-tight">한국투자증권 모의투자 연동 계좌 현황</h2>
-                <p className="text-slate-400 text-xs mt-1">
-                  모든 KIS 연동 AI 모델들이 공유하여 거래하는 실제 증권사 모의투자 계좌의 실시간 원장 잔고입니다.
-                </p>
+          <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 mb-6">
+            <div>
+              <div className="flex items-center gap-2 mb-2">
+                <Shield className="w-5 h-5 text-emerald-400" />
+                <span className="text-xs font-extrabold text-emerald-400 tracking-wider uppercase">KIS OpenAPI Live Account Status</span>
               </div>
+              <h2 className="text-2xl font-black tracking-tight">한국투자증권 모의투자 연동 계좌 현황</h2>
+              <p className="text-slate-400 text-xs mt-1">
+                모든 KIS 연동 AI 모델들이 공유하여 거래하는 실제 증권사 모의투자 계좌의 실시간 원장 잔고입니다.
+              </p>
+            </div>
+            {kisMockBalance && kisMockBalance.success && (
               <div className="flex items-center gap-3 bg-white/10 px-4 py-2.5 rounded-2xl border border-white/10 w-full lg:w-auto justify-between lg:justify-start">
                 <span className="text-xs text-slate-300 font-bold">연동 계좌번호</span>
                 <span className="text-sm font-black tracking-wide text-emerald-400">{kisMockBalance.cano}</span>
               </div>
-            </div>
+            )}
+          </div>
 
+          {!kisMockBalance ? (
+            <div className="flex items-center justify-center py-8 text-slate-400 text-sm font-semibold gap-2.5 bg-white/5 border border-white/10 rounded-2xl">
+              <span className="animate-spin rounded-full h-4.5 w-4.5 border-2 border-emerald-400 border-t-transparent" />
+              한투 모의투자 계좌 잔고를 불러오는 중입니다...
+            </div>
+          ) : !kisMockBalance.success ? (
+            <div className="bg-rose-500/10 border border-rose-500/20 rounded-2xl p-5 text-rose-300 text-xs flex flex-col gap-2">
+              <div className="font-extrabold flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
+                한투 OpenAPI 실시간 잔고 조회에 실패하였습니다.
+              </div>
+              <p className="text-slate-400 text-xs">
+                원인: {kisMockBalance.error || "백엔드 API 호출 오류 (서버 미재기동 또는 KIS 인증 정보 확인 요망)"}
+              </p>
+              <p className="text-slate-500 text-[10px] mt-1 font-bold">
+                ※ 새로운 백엔드 API가 아직 도커(Docker) 컨테이너에 빌드 및 반영되지 않았을 수 있습니다. 터미널에서 `docker compose up --build -d stock-core-api` 명령어를 사용하여 재빌드 및 재구동을 진행해 주시기 바랍니다.
+              </p>
+            </div>
+          ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
               <div className="bg-white/5 border border-white/10 rounded-2xl p-5">
                 <p className="text-xs text-slate-400 font-bold mb-1">실시간 주문가능 예수금</p>
@@ -580,8 +600,8 @@ export default function AdminAiMonitoringPage() {
                 <p className="text-[10px] text-slate-500 mt-1">예수금 + 주식 평가 가치 합산</p>
               </div>
             </div>
-          </div>
-        )}
+          )}
+        </div>
 
         {/* Combined Metrics Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">

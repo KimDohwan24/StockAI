@@ -72,6 +72,17 @@ public class AdminController {
     public ResponseEntity<Map<String, Object>> getSystemStatus() {
         return ResponseEntity.ok(adminService.getSystemStatus());
     }
+
+    @PostMapping("/users/{email}/sell-all")
+    public ResponseEntity<Void> sellAllHoldings(@PathVariable String email) {
+        adminService.sellAllHoldings(email);
+        return ResponseEntity.ok().build();
+    }
+
+    @GetMapping("/kis/mock-balance")
+    public ResponseEntity<Map<String, Object>> getKisMockBalance() {
+        return ResponseEntity.ok(adminService.getKisMockBalance());
+    }
 }
 
 

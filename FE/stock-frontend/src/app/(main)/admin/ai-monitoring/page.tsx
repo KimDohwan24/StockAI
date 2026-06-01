@@ -1,6 +1,6 @@
 'use client';
 
-import { AdminAiStatusResponse, getAdminAiStatus, getAdminSystemStatus, HoldingResponse, resetAiAccounts, resetUserReservations, syncDomesticStocks, syncNaverNews, syncOverseasStocks, toggleUserAiTrading, toggleUserMockOrder, updateUserInitialBalance } from '@/lib/api';
+import { AdminAiStatusResponse, getAdminAiStatus, getAdminSystemStatus, HoldingResponse, resetAiAccounts, resetUserReservations, syncDomesticStocks, syncNaverNews, syncOverseasStocks, toggleUserAiTrading, toggleUserMockOrder, updateUserInitialBalance, sellAllUserHoldings, getKisMockBalance } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { resolveStockName } from '@/lib/stockMap';
 import { wsManager } from '@/lib/websocket';
@@ -77,6 +77,33 @@ export default function AdminAiMonitoringPage() {
     getAdminSystemStatus,
     { refreshInterval: 10000, dedupingInterval: 5000 }
   );
+
+  // Fetch KIS Mock Balance
+  const { data: kisMockBalance, mutate: mutateKisBalance } = useSWR(
+    isAuthenticated && user?.role === 'ADMIN' ? 'admin-kis-mock-balance' : null,
+    getKisMockBalance,
+    { refreshInterval: 10000, dedupingInterval: 5000 }
+  );
+
+  const [sellingAll, setSellingAll] = useState<Record<string, boolean>>({});
+
+  const handleSellAll = async (email: string) => {
+    if (!window.confirm('이 AI 계정이 보유한 모든 주식을 실제 한투 모의투자 API를 통해 전액 시장가로 즉시 매도(청산)하시겠습니까?')) {
+      return;
+    }
+    setSellingAll((prev) => ({ ...prev, [email]: true }));
+    try {
+      await sellAllUserHoldings(email);
+      alert('보유 주식 전액 매도(청산) 주문이 정상적으로 실행되었습니다.');
+      mutate();
+      mutateKisBalance();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : '알 수 없는 오류';
+      alert(`전액 매도 실패: ${msg}`);
+    } finally {
+      setSellingAll((prev) => ({ ...prev, [email]: false }));
+    }
+  };
 
   // AI 매매 이벤트 실시간 감지하여 자동 새로고침(mutate)
   useEffect(() => {
@@ -508,6 +535,54 @@ export default function AdminAiMonitoringPage() {
           </div>
         </div>
 
+        {/* KIS Mock Account Real Balance Dashboard */}
+        {kisMockBalance && kisMockBalance.success && (
+          <div className="relative overflow-hidden bg-gradient-to-tr from-slate-900 via-slate-800 to-indigo-950 border border-slate-700/60 rounded-[32px] p-6 sm:p-8 shadow-xl text-white">
+            <div className="absolute top-0 right-0 -mt-10 -mr-10 w-48 h-48 bg-indigo-500 rounded-full blur-3xl opacity-35 pointer-events-none" />
+            <div className="absolute -bottom-10 -left-10 w-48 h-48 bg-emerald-500 rounded-full blur-3xl opacity-20 pointer-events-none" />
+
+            <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 mb-6">
+              <div>
+                <div className="flex items-center gap-2 mb-2">
+                  <Shield className="w-5 h-5 text-emerald-400" />
+                  <span className="text-xs font-extrabold text-emerald-400 tracking-wider uppercase">KIS OpenAPI Live Account Status</span>
+                </div>
+                <h2 className="text-2xl font-black tracking-tight">한국투자증권 모의투자 연동 계좌 현황</h2>
+                <p className="text-slate-400 text-xs mt-1">
+                  모든 KIS 연동 AI 모델들이 공유하여 거래하는 실제 증권사 모의투자 계좌의 실시간 원장 잔고입니다.
+                </p>
+              </div>
+              <div className="flex items-center gap-3 bg-white/10 px-4 py-2.5 rounded-2xl border border-white/10 w-full lg:w-auto justify-between lg:justify-start">
+                <span className="text-xs text-slate-300 font-bold">연동 계좌번호</span>
+                <span className="text-sm font-black tracking-wide text-emerald-400">{kisMockBalance.cano}</span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+              <div className="bg-white/5 border border-white/10 rounded-2xl p-5">
+                <p className="text-xs text-slate-400 font-bold mb-1">실시간 주문가능 예수금</p>
+                <p className="text-xl font-extrabold text-emerald-400">{fmt(kisMockBalance.prvsRcdlExccAmt)}원</p>
+                <p className="text-[10px] text-slate-500 mt-1">한투 API 실제 주문 가능 금액</p>
+              </div>
+              <div className="bg-white/5 border border-white/10 rounded-2xl p-5">
+                <p className="text-xs text-slate-400 font-bold mb-1">금일 누적 매수 주문</p>
+                <p className="text-xl font-extrabold text-amber-400">{fmt(kisMockBalance.thdtBuyAmt)}원</p>
+                <p className="text-[10px] text-slate-500 mt-1">오늘 하루 동안 체결/체결대기 중인 매수 총액</p>
+              </div>
+              <div className="bg-white/5 border border-white/10 rounded-2xl p-5">
+                <p className="text-xs text-slate-400 font-bold mb-1">보유 주식 평가금액</p>
+                <p className="text-xl font-extrabold text-indigo-300">{fmt(kisMockBalance.sctsEvluAmt)}원</p>
+                <p className="text-[10px] text-slate-500 mt-1">계좌 내 주식 평가자산 총액</p>
+              </div>
+              <div className="bg-white/5 border border-white/10 rounded-2xl p-5">
+                <p className="text-xs text-slate-400 font-bold mb-1">계좌 총 평가 자산</p>
+                <p className="text-xl font-extrabold text-white">{fmt(kisMockBalance.totEvluAmt)}원</p>
+                <p className="text-[10px] text-slate-500 mt-1">예수금 + 주식 평가 가치 합산</p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Combined Metrics Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           <div className="bg-gradient-to-tr from-white to-surface-soft border border-hairline-soft rounded-[28px] p-6 shadow-sm">
@@ -765,10 +840,21 @@ export default function AdminAiMonitoringPage() {
                   <div className="space-y-6">
                     {/* 보유 주식 */}
                     <div className="space-y-3">
-                      <h3 className="text-base font-extrabold text-ink flex items-center gap-2">
-                        <Briefcase className="w-4.5 h-4.5 text-meta-blue" />
-                        보유 주식 ({actualHoldings.length}종목)
-                      </h3>
+                      <div className="flex items-center justify-between mb-3">
+                        <h3 className="text-base font-extrabold text-ink flex items-center gap-2">
+                          <Briefcase className="w-4.5 h-4.5 text-meta-blue" />
+                          보유 주식 ({actualHoldings.length}종목)
+                        </h3>
+                        {ai.profile.mockOrderEnabled && actualHoldings.length > 0 && (
+                          <button
+                            onClick={() => handleSellAll(ai.profile.email)}
+                            disabled={sellingAll[ai.profile.email]}
+                            className="px-3.5 py-2 bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white rounded-xl text-xs font-bold shadow-sm transition-all flex items-center gap-1 cursor-pointer"
+                          >
+                            {sellingAll[ai.profile.email] ? '매도 중...' : '전액 매도 (청산)'}
+                          </button>
+                        )}
+                      </div>
                       {actualHoldings.length > 0 ? (
                         <div className="border border-hairline-soft rounded-2xl overflow-hidden max-h-[220px] overflow-y-auto">
                           <table className="w-full text-left border-collapse text-xs">

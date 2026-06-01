@@ -41,29 +41,51 @@ public class BasketOrderScheduler {
         for (BasketItem item : activeItems) {
             try {
                 User user = userRepository.findById(item.getUserId()).orElse(null);
-                if (user == null) continue;
+                if (user == null) {
+                    item.setActive(false);
+                    basketRepository.save(item);
+                    continue;
+                }
 
                 // For Korea Investment Securities (Mock) integrated accounts, only execute during market hours
                 if (user.isMockOrderEnabled() && !isMarketHours()) {
                     continue;
                 }
 
-                StockPriceResponse priceResp = stockPriceService.getCurrentPrice(item.getStockCode());
-                if (priceResp == null || priceResp.getStck_prpr() == null) continue;
-
-                double currentPrice = Double.parseDouble(priceResp.getStck_prpr().trim());
-                if (currentPrice <= 0) continue;
-
-                if (item.getAiReservation() != null && item.getAiReservation()) {
-                    executeAiReservation(user, item, (int) currentPrice);
-                } else {
-                    // 목표가 이하로 떨어지면 자동 예약 매수 발동 (사용자 수동 장바구니)
-                    if (currentPrice <= item.getTargetPrice()) {
-                        executeOrder(user, item, (int) currentPrice);
+                try {
+                    StockPriceResponse priceResp = stockPriceService.getCurrentPrice(item.getStockCode());
+                    if (priceResp == null || priceResp.getStck_prpr() == null) {
+                        throw new RuntimeException("현재 주가 정보를 가져올 수 없습니다.");
                     }
+
+                    double currentPrice = Double.parseDouble(priceResp.getStck_prpr().trim());
+                    if (currentPrice <= 0) {
+                        throw new RuntimeException("유효하지 않은 주가 가격입니다. (가격: " + currentPrice + ")");
+                    }
+
+                    if (item.getAiReservation() != null && item.getAiReservation()) {
+                        executeAiReservation(user, item, (int) currentPrice);
+                    } else {
+                        // 목표가 이하로 떨어지면 자동 예약 매수 발동 (사용자 수동 장바구니)
+                        if (currentPrice <= item.getTargetPrice()) {
+                            executeOrder(user, item, (int) currentPrice);
+                        }
+                    }
+                } catch (Exception e) {
+                    log.error("예약 주문 처리 중 에러 발생 - 항목 ID: {}, 강제 초기화(비활성화) 처리합니다.", item.getId(), e);
+                    item.setActive(false);
+                    basketRepository.save(item);
+
+                    String errorMsg = String.format("❌ 예약 자동 주문 (%s, %s) 처리 중 오류 발생으로 취소되었습니다: %s",
+                            item.getStockName(), item.getStockCode(), e.getMessage());
+                    notificationRepository.save(new Notification(user.getId(), errorMsg));
                 }
             } catch (Exception e) {
-                log.error("예약 주문 처리 오류 (항목 ID: " + item.getId() + ")", e);
+                log.error("예약 주문 처리 심각한 오류 (항목 ID: " + item.getId() + ")", e);
+                try {
+                    item.setActive(false);
+                    basketRepository.save(item);
+                } catch (Exception ignored) {}
             }
         }
     }

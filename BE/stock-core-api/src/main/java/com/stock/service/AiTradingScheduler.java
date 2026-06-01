@@ -146,11 +146,11 @@ public class AiTradingScheduler {
                 );
                 // Correct model IDs
                 List<String> actualFreeModels = List.of(
-                        "openrouter/free",
-                        "openrouter/free",
-                        "openrouter/free",
-                        "openrouter/free",
-                        "openrouter/free"
+                        "google/gemma-2-9b-it:free",
+                        "meta-llama/llama-3-8b-instruct:free",
+                        "qwen/qwen-2.5-7b-instruct:free",
+                        "mistralai/mistral-7b-instruct:free",
+                        "microsoft/phi-3-medium-128k-intro:free"
                 );
                 String assignedModel = actualFreeModels.get(modelIndex);
                 log.info("User={} (ID={}) using AI Model: {} to evaluate {} stocks", 

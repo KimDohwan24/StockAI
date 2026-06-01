@@ -46,8 +46,15 @@ public class AiTradingScheduler {
     private final OverseasStockMasterRepository overseasStockMasterRepository;
     private final BasketRepository basketRepository;
 
+    @org.springframework.beans.factory.annotation.Value("${app.scheduler.enabled:false}")
+    private boolean schedulerEnabled;
+
     @Scheduled(fixedDelayString = "${app.ai-trading.interval-ms:60000}")
     public void runAiTradingTick() {
+        if (!schedulerEnabled) {
+            log.debug("AI Autotrading scheduler is disabled in this environment (local/dev). Skipping execution.");
+            return;
+        }
         log.info("Starting AI Autotrading tick execution with dynamic news-based stocks...");
         List<User> activeUsers = userRepository.findAllByAiTradingEnabled(true);
         if (activeUsers.isEmpty()) {

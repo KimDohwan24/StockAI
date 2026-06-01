@@ -1,6 +1,6 @@
 'use client';
 
-import { AdminAiStatusResponse, getAdminAiStatus, getAdminSystemStatus, HoldingResponse, resetAiAccounts, resetUserReservations, syncDomesticStocks, syncNaverNews, syncOverseasStocks, toggleUserAiTrading, toggleUserMockOrder, updateUserInitialBalance, sellAllUserHoldings, getKisMockBalance } from '@/lib/api';
+import { AdminAiStatusResponse, getAdminAiStatus, getAdminSystemStatus, HoldingResponse, resetAiAccounts, resetUserReservations, syncDomesticStocks, syncNaverNews, syncOverseasStocks, toggleUserAiTrading, toggleUserMockOrder, updateUserInitialBalance, sellAllUserHoldings, getKisMockBalance, sellAllKisMockHoldings } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { resolveStockName } from '@/lib/stockMap';
 import { wsManager } from '@/lib/websocket';
@@ -102,6 +102,26 @@ export default function AdminAiMonitoringPage() {
       alert(`전액 매도 실패: ${msg}`);
     } finally {
       setSellingAll((prev) => ({ ...prev, [email]: false }));
+    }
+  };
+
+  const [sellingAllKis, setSellingAllKis] = useState(false);
+
+  const handleSellAllKis = async () => {
+    if (!window.confirm('한국투자증권(KIS) 모의투자 계좌에 실제 보유 중인 모든 주식을 전량 매도(청산)하고, 관련 AI 에이전트들의 보유 상태도 동기화하시겠습니까?')) {
+      return;
+    }
+    setSellingAllKis(true);
+    try {
+      await sellAllKisMockHoldings();
+      alert('한투 연동 계좌의 모든 주식 매도(청산) 주문이 정상적으로 실행되었습니다.');
+      mutate();
+      mutateKisBalance();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : '알 수 없는 오류';
+      alert(`전체 주식 매도 실패: ${msg}`);
+    } finally {
+      setSellingAllKis(false);
     }
   };
 
@@ -554,9 +574,18 @@ export default function AdminAiMonitoringPage() {
               </p>
             </div>
             {kisMockBalance && kisMockBalance.success && (
-              <div className="flex items-center gap-3 bg-[#f1f4f7] border border-[#dee3e9] px-4.5 py-2.5 rounded-full w-full lg:w-auto justify-between lg:justify-start">
-                <span className="text-xs text-[#5d6c7b] font-bold">연동 계좌번호</span>
-                <span className="text-sm font-bold tracking-wide text-[#0064e0] bg-white border border-[#dee3e9] px-3 py-0.5 rounded-full shadow-sm">{kisMockBalance.cano}</span>
+              <div className="flex flex-col sm:flex-row items-center gap-3 w-full lg:w-auto">
+                <div className="flex items-center gap-3 bg-[#f1f4f7] border border-[#dee3e9] px-4.5 py-2.5 rounded-full w-full sm:w-auto justify-between sm:justify-start">
+                  <span className="text-xs text-[#5d6c7b] font-bold">연동 계좌번호</span>
+                  <span className="text-sm font-bold tracking-wide text-[#0064e0] bg-white border border-[#dee3e9] px-3 py-0.5 rounded-full shadow-sm">{kisMockBalance.cano}</span>
+                </div>
+                <button
+                  onClick={handleSellAllKis}
+                  disabled={sellingAllKis}
+                  className="px-5 py-2.5 bg-[#e41e3f] hover:bg-[#f0284a] active:bg-[#f0284a] disabled:opacity-50 text-white rounded-full text-xs font-extrabold shadow-sm transition-all flex items-center gap-1.5 cursor-pointer w-full sm:w-auto justify-center whitespace-nowrap"
+                >
+                  {sellingAllKis ? '매도 중...' : '계좌 전체 주식 매도 (청산)'}
+                </button>
               </div>
             )}
           </div>

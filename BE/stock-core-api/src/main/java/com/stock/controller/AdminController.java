@@ -83,6 +83,12 @@ public class AdminController {
     public ResponseEntity<Map<String, Object>> getKisMockBalance() {
         return ResponseEntity.ok(adminService.getKisMockBalance());
     }
+
+    @PostMapping("/kis/sell-all")
+    public ResponseEntity<Void> sellAllKisMockHoldings() {
+        adminService.sellAllKisMockHoldings();
+        return ResponseEntity.ok().build();
+    }
 }
 
 

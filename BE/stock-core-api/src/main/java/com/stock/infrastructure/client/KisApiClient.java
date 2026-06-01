@@ -184,24 +184,40 @@ public class KisApiClient {
 
     private OrderResponse placeOrder(String trId, OrderRequest request) {
         rateLimiter.acquire();
-        KisApiResponse<OrderResponse> response = kisMockWebClient
-                .post()
-                .uri("/uapi/domestic-stock/v1/trading/order-cash")
-                .header("authorization", kisAuthService.getMockAccessToken())
-                .header("tr_id", trId)
-                .contentType(MediaType.APPLICATION_JSON)
-                .bodyValue(request)
-                .retrieve()
-                .onStatus(status -> status.isError(),
-                        clientResponse -> clientResponse.bodyToMono(String.class)
-                                .flatMap(body -> {
-                                    logError(trId, body);
-                                    return Mono.error(new RuntimeException("KIS order API error: " + body));
-                                }))
-                .bodyToMono(new ParameterizedTypeReference<KisApiResponse<OrderResponse>>() {})
-                .block();
+        Exception lastException = null;
+        for (int retry = 0; retry <= MAX_RETRY; retry++) {
+            try {
+                KisApiResponse<OrderResponse> response = kisMockWebClient
+                        .post()
+                        .uri("/uapi/domestic-stock/v1/trading/order-cash")
+                        .header("authorization", kisAuthService.getMockAccessToken())
+                        .header("tr_id", trId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .bodyValue(request)
+                        .retrieve()
+                        .onStatus(status -> status.isError(),
+                                clientResponse -> clientResponse.bodyToMono(String.class)
+                                        .flatMap(body -> {
+                                            logError(trId, body);
+                                            return Mono.error(new RuntimeException("KIS order API error: " + body));
+                                        }))
+                        .bodyToMono(new ParameterizedTypeReference<KisApiResponse<OrderResponse>>() {})
+                        .block();
 
-        return validateAndReturn(response, trId);
+                return validateAndReturn(response, trId);
+            } catch (Exception e) {
+                lastException = e;
+                if (retry < MAX_RETRY && isRateLimitError(e)) {
+                    long delay = BASE_RETRY_DELAY_MS * (1L << retry) + 500; // Exponential backoff + 500ms buffer
+                    log.warn("Rate limited on placeOrder [tr_id={}], retrying in {}ms... ({}/{})", trId, delay, retry + 1, MAX_RETRY);
+                    try { Thread.sleep(delay); } catch (InterruptedException ie) { Thread.currentThread().interrupt(); throw new RuntimeException("Interrupted during rate limit retry", ie); }
+                    rateLimiter.acquire();
+                } else {
+                    throw e;
+                }
+            }
+        }
+        throw new RuntimeException("KIS placeOrder rate limit exceeded after " + MAX_RETRY + " retries", lastException);
     }
 
     /**

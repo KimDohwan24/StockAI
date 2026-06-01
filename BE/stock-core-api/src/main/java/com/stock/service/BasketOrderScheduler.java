@@ -30,9 +30,15 @@ public class BasketOrderScheduler {
     private final StockOrderService stockOrderService;
     private final NotificationRepository notificationRepository;
 
+    @org.springframework.beans.factory.annotation.Value("${app.scheduler.enabled:false}")
+    private boolean schedulerEnabled;
+
     @Scheduled(fixedDelay = 15000) // 15초마다 실시간 주가 감시
     @Transactional
     public void checkAndExecuteReservations() {
+        if (!schedulerEnabled) {
+            return;
+        }
         List<BasketItem> activeItems = basketRepository.findAllByActiveTrue();
         if (activeItems.isEmpty()) {
             return;

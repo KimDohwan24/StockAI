@@ -158,7 +158,7 @@ public class StockOrderService {
                     mockAcntPrdtCd,
                     stockCode,
                     quantity,
-                    price
+                    0 // KIS OpenAPI 모의투자 매도 시 지정가 대신 항상 시장가(0)로 주문하여 100% 즉시 체결 보장
             );
             response = kisApiClient.sellStock(request);
         } else {

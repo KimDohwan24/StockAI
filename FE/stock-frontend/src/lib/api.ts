@@ -548,6 +548,12 @@ export async function sellAllUserHoldings(email: string): Promise<void> {
   });
 }
 
+export async function sellAllKisMockHoldings(): Promise<void> {
+  await fetcher<void>(`${API_BASE_URL}/api/admin/kis/sell-all`, {
+    method: 'POST',
+  });
+}
+
 export interface KisMockBalanceResponse {
   success: boolean;
   cano: string;

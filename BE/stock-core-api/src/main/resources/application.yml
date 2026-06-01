@@ -35,6 +35,8 @@ app:
     timeout: ${APP_AI_SERVER_TIMEOUT:5000}
   ai-trading:
     interval-ms: ${APP_AI_TRADING_INTERVAL_MS:60000}
+  scheduler:
+    enabled: ${APP_SCHEDULER_ENABLED:false}
   jwt:
     secret: ${APP_JWT_SECRET}
     expiration: ${APP_JWT_EXPIRATION}

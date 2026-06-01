@@ -146,11 +146,11 @@ public class AiTradingScheduler {
                 );
                 // Correct model IDs
                 List<String> actualFreeModels = List.of(
-                        "openrouter/free",
-                        "openrouter/free",
-                        "openrouter/free",
-                        "openrouter/free",
-                        "openrouter/free"
+                        "google/gemma-2-9b-it:free",
+                        "meta-llama/llama-3-8b-instruct:free",
+                        "qwen/qwen-2.5-7b-instruct:free",
+                        "mistralai/mistral-7b-instruct:free",
+                        "microsoft/phi-3-medium-128k-intro:free"
                 );
                 String assignedModel = actualFreeModels.get(modelIndex);
                 log.info("User={} (ID={}) using AI Model: {} to evaluate {} stocks", 
@@ -262,26 +262,48 @@ public class AiTradingScheduler {
                     try {
                         if ("BUY".equals(signal)) {
                             // Total allocation check
-                            if (stockValue >= totalAssets * targetAllocationPct) continue;
+                            if (stockValue >= totalAssets * targetAllocationPct) {
+                                log.info("AI Skip BUY (Total Allocation Limit Exceeded): User={}, Stock={}, stockValue={}, Limit={}", 
+                                        user.getEmail(), stockCode, stockValue, totalAssets * targetAllocationPct);
+                                continue;
+                            }
 
                             // Single stock allocation check
                             double currentHoldingValue = holding != null ? price * holding.getQuantity() : 0;
-                            if (currentHoldingValue >= totalAssets * singleStockCapPct) continue;
+                            if (currentHoldingValue >= totalAssets * singleStockCapPct) {
+                                log.info("AI Skip BUY (Single Stock Cap Exceeded): User={}, Stock={}, currentHoldingValue={}, CapLimit={}", 
+                                        user.getEmail(), stockCode, currentHoldingValue, totalAssets * singleStockCapPct);
+                                continue;
+                            }
 
                             // Calculate buy qty
                             double buyAmountMoney = totalAssets * buyAmtPct;
                             int buyQty = (int) (buyAmountMoney / price);
-                            if (buyQty < 1) buyQty = 1;
+                            if (buyQty < 1) {
+                                log.info("AI Qty Adjustment: Calculated buyQty is 0 (buyAmountMoney={}, price={}). Force set to 1.", buyAmountMoney, price);
+                                buyQty = 1;
+                            }
 
                             // Check and adjust for cap limits
                             double newExpectedValue = currentHoldingValue + (price * buyQty);
                             if (newExpectedValue > totalAssets * singleStockCapPct) {
+                                int oldQty = buyQty;
                                 buyQty = (int) ((totalAssets * singleStockCapPct - currentHoldingValue) / price);
+                                log.info("AI Qty Adjusted for Cap limit: User={}, Stock={}, adjusted from {} to {} due to singleStockCapPct limit ({})", 
+                                        user.getEmail(), stockCode, oldQty, buyQty, totalAssets * singleStockCapPct);
                             }
 
-                            if (buyQty <= 0) continue;
+                            if (buyQty <= 0) {
+                                log.info("AI Skip BUY (Qty <= 0 after adjustment): User={}, Stock={}, price={}", 
+                                        user.getEmail(), stockCode, price);
+                                continue;
+                            }
 
                             double totalCost = (double) price * buyQty;
+                            if (user.getCashBalance() < totalCost) {
+                                log.info("AI Skip BUY (Insufficient Cash): User={}, Stock={}, CashBalance={}, Required={}", 
+                                        user.getEmail(), stockCode, user.getCashBalance(), totalCost);
+                            }
                             if (user.getCashBalance() >= totalCost) {
                                 if (user.isMockOrderEnabled() && !isMarketHours()) {
                                     // 장외 시간대이므로 예약 매수로 등록
